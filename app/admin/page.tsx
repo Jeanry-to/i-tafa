@@ -1,20 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-
 export default function AdminDashboard() {
-  const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchUsers() {
-      const { data, error } = await supabase.from("users").select("*");
-      if (!error && data) setUsers(data);
-      setLoading(false);
-    }
-    fetchUsers();
-  }, []);
+  const users = [
+    { id: "1", email: "demo@itafa.com", created_at: new Date().toISOString() }
+  ];
 
   return (
     <div style={{ padding: "40px", fontFamily: "sans-serif", backgroundColor: "#f4f6f8", minHeight: "100vh" }}>
@@ -41,30 +30,24 @@ export default function AdminDashboard() {
 
         <section style={{ background: "#fff", padding: "20px", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
           <h2 style={{ marginTop: 0, fontSize: "20px" }}>Liste des membres</h2>
-          {loading ? (
-            <p>Chargement des données...</p>
-          ) : users.length === 0 ? (
-            <p style={{ color: "#888" }}>Aucun utilisateur enregistré pour le moment.</p>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #ddd" }}>
-                  <th style={{ padding: "10px" }}>ID</th>
-                  <th style={{ padding: "10px" }}>Email</th>
-                  <th style={{ padding: "10px" }}>Date d'inscription</th>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #ddd" }}>
+                <th style={{ padding: "10px" }}>ID</th>
+                <th style={{ padding: "10px" }}>Email</th>
+                <th style={{ padding: "10px" }}>Date d'inscription</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} style={{ borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: "10px" }}>{u.id}</td>
+                  <td style={{ padding: "10px" }}>{u.email}</td>
+                  <td style={{ padding: "10px" }}>{new Date(u.created_at).toLocaleDateString()}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "10px" }}>{u.id}</td>
-                    <td style={{ padding: "10px" }}>{u.email}</td>
-                    <td style={{ padding: "10px" }}>{new Date(u.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+              ))}
+            </tbody>
+          </table>
         </section>
       </div>
     </div>
