@@ -9,7 +9,6 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function fetchUsers() {
-      // Récupération des membres depuis Supabase
       const { data, error } = await supabase.from("users").select("*");
       if (!error && data) setUsers(data);
       setLoading(false);
@@ -45,7 +44,7 @@ export default function AdminDashboard() {
           {loading ? (
             <p>Chargement des données...</p>
           ) : users.length === 0 ? (
-            <p style={{ color: "#888" }}>Aucun utilisateur enregistré dans la base Supabase pour le moment.</p>
+            <p style={{ color: "#888" }}>Aucun utilisateur enregistré pour le moment.</p>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
               <thead>
