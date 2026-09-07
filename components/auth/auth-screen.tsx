@@ -1,12 +1,14 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   BellRing,
   Check,
   Copy,
+  Eye,
+  EyeOff,
   Loader2,
   Lock,
   MessagesSquare,
@@ -21,7 +23,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ADMIN, BRAND, isAdminLogin } from '@/lib/mock-data'
+import { BRAND } from '@/lib/mock-data'
+import { signIn, signUp, getCurrentProfile, getActivePaymentMethods, type PaymentMethod } from '@/lib/services/api'
 import { playBip } from '@/lib/beep'
 
 type Mode = 'auth' | 'forgot'
@@ -29,18 +32,18 @@ type Mode = 'auth' | 'forgot'
 const features = [
   {
     icon: ShieldCheck,
-    title: 'Connexion sécurisée',
-    text: 'Compte Google ou identifiant, session limitée à un seul appareil.',
+    title: 'Connexion securisee',
+    text: 'Compte Google ou identifiant, session limitee a un seul appareil.',
   },
   {
     icon: MessagesSquare,
     title: 'Messagerie directe',
-    text: 'Discussion privée avec Sarobidy et annonces officielles.',
+    text: 'Discussion privee avec Sarobidy et annonces officielles.',
   },
   {
     icon: Smartphone,
     title: 'Paiement Mvola',
-    text: 'Payez, entrez la référence, accédez immédiatement au service.',
+    text: 'Payez, entrez la reference, accedez immediatement au service.',
   },
 ]
 
@@ -55,11 +58,11 @@ export function AuthScreen() {
         <BrandLogo variant="light" />
         <div className="hidden lg:block">
           <h1 className="text-balance font-display text-4xl font-bold leading-tight">
-            Restez connecté à votre service, en toute confiance.
+            Restez connecte a votre service, en toute confiance.
           </h1>
           <p className="mt-4 max-w-md text-pretty leading-relaxed text-sidebar-foreground/70">
-            i-tafa réunit paiement Mvola, messagerie privée et annonces dans un
-            espace simple et sécurisé, géré par {BRAND.owner}.
+            i-tafa reunit paiement Mvola, messagerie privee et annonces dans un
+            espace simple et securise, gere par {BRAND.owner}.
           </p>
           <ul className="mt-10 flex flex-col gap-6">
             {features.map((f) => (
@@ -78,7 +81,7 @@ export function AuthScreen() {
           </ul>
         </div>
         <p className="hidden text-xs text-sidebar-foreground/50 lg:block">
-          © 2026 i-tafa · Titulaire du compte : {BRAND.owner}
+          (c) 2026 i-tafa - Titulaire du compte : {BRAND.owner}
         </p>
       </section>
 
@@ -114,7 +117,7 @@ function AuthTabs({
       <div className="mb-6">
         <h2 className="font-display text-2xl font-bold">Bienvenue</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Connectez-vous ou créez votre compte pour accéder à i-tafa.
+          Connectez-vous ou creez votre compte pour acceder a i-tafa.
         </p>
       </div>
 
@@ -136,26 +139,6 @@ function AuthTabs({
           <RegisterFlow onSuccess={onEnterClient} />
         </TabsContent>
       </Tabs>
-
-      <div className="mt-8 rounded-xl border border-dashed border-border bg-muted/50 p-4">
-        <p className="text-xs font-medium text-muted-foreground">
-          Accès démo (prototype)
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          Connexion administrateur :{' '}
-          <span className="font-medium text-foreground">{ADMIN.email}</span> ·
-          mot de passe{' '}
-          <span className="font-medium text-foreground">{ADMIN.password}</span>
-        </p>
-        <div className="mt-2 flex gap-2">
-          <Button size="sm" variant="secondary" className="flex-1" onClick={onEnterClient}>
-            Espace client
-          </Button>
-          <Button size="sm" variant="secondary" className="flex-1" onClick={onEnterAdmin}>
-            Espace admin
-          </Button>
-        </div>
-      </div>
     </>
   )
 }
@@ -173,23 +156,31 @@ function LoginForm({
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const asAdmin = isAdminLogin(identifier, password)
-    setTimeout(() => {
-      if (asAdmin) {
+    try {
+      await signIn(identifier, password)
+      const profile = await getCurrentProfile()
+
+      if (profile?.role === 'admin') {
         toast.success('Connexion administrateur', {
-          description: `Bienvenue ${ADMIN.name}, accès à l'espace de gestion.`,
+          description: `Bienvenue ${profile.full_name}, acces a l'espace de gestion.`,
         })
         onEnterAdmin()
       } else {
-        toast.success('Connexion réussie', {
-          description: 'Toute session sur un autre appareil a été fermée.',
+        toast.success('Connexion reussie', {
+          description: 'Toute session sur un autre appareil a ete fermee.',
         })
         onEnterClient()
       }
-    }, 700)
+    } catch (error) {
+      toast.error('Connexion impossible', {
+        description: error instanceof Error ? error.message : 'Identifiants incorrects.',
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -215,22 +206,21 @@ function LoginForm({
             onClick={onForgot}
             className="text-xs font-medium text-primary hover:underline"
           >
-            Mot de passe oublié ?
+            Mot de passe oublie ?
           </button>
         </div>
-        <Input
+        <PasswordInput
           id="login-pw"
-          type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••••••"
+          placeholder="********"
           required
         />
       </div>
       <div className="flex items-start gap-2 rounded-lg bg-secondary/60 p-3 text-xs text-secondary-foreground">
         <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          Accès limité à 1 appareil : une nouvelle connexion déconnecte
+          Acces limite a 1 appareil : une nouvelle connexion deconnecte
           automatiquement l&apos;ancien appareil.
         </span>
       </div>
@@ -249,7 +239,7 @@ function RegisterFlow({ onSuccess }: { onSuccess: () => void }) {
     <div>
       <StepIndicator step={step} />
       {step === 'info' && <RegisterInfo onNext={() => setStep('pay')} />}
-      {step === 'pay' && <MvolaPayment onValidated={() => setStep('done')} />}
+      {step === 'pay' && <PaymentStep onValidated={() => setStep('done')} />}
       {step === 'done' && <RegisterDone onEnter={onSuccess} />}
     </div>
   )
@@ -258,7 +248,7 @@ function RegisterFlow({ onSuccess }: { onSuccess: () => void }) {
 function StepIndicator({ step }: { step: 'info' | 'pay' | 'done' }) {
   const order = ['info', 'pay', 'done']
   const idx = order.indexOf(step)
-  const labels = ['Compte', 'Paiement', 'Accès']
+  const labels = ['Compte', 'Paiement', 'Acces']
   return (
     <div className="mb-6 flex items-center gap-2">
       {labels.map((label, i) => (
@@ -291,91 +281,211 @@ function StepIndicator({ step }: { step: 'info' | 'pay' | 'done' }) {
 }
 
 function RegisterInfo({ onNext }: { onNext: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [pseudo, setPseudo] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (password !== confirmPassword) {
+      toast.error('Les mots de passe ne correspondent pas')
+      return
+    }
+    if (password.length < 6) {
+      toast.error('Le mot de passe doit contenir au moins 6 caracteres')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await signUp(email, password, fullName, pseudo)
+      toast.success('Compte cree', {
+        description: 'Passons maintenant au paiement.',
+      })
+      onNext()
+    } catch (error) {
+      toast.error('Inscription impossible', {
+        description: error instanceof Error ? error.message : 'Reessayez.',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        onNext()
-      }}
-      className="flex flex-col gap-4"
-    >
+    <form onSubmit={submit} className="flex flex-col gap-4">
       <GoogleButton label="S'inscrire avec Google" onClick={onNext} />
       <Divider />
       <div className="flex flex-col gap-2">
         <Label htmlFor="reg-name">Nom complet</Label>
-        <Input id="reg-name" placeholder="Miora Rakoto" required />
+        <Input
+          id="reg-name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          placeholder="Miora Rakoto"
+          required
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="reg-pseudo">Pseudo</Label>
+        <Input
+          id="reg-pseudo"
+          value={pseudo}
+          onChange={(e) => setPseudo(e.target.value)}
+          placeholder="miora_r"
+          required
+        />
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="reg-email">Adresse e-mail</Label>
-        <Input id="reg-email" type="email" placeholder="vous@email.mg" required />
+        <Input
+          id="reg-email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="vous@email.mg"
+          required
+        />
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="reg-pw">Mot de passe</Label>
-        <Input id="reg-pw" type="password" placeholder="Choisissez un mot de passe" required />
+        <PasswordInput
+          id="reg-pw"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Choisissez un mot de passe"
+          required
+        />
       </div>
-      <Button type="submit" className="w-full">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="reg-pw-confirm">Confirmer le mot de passe</Label>
+        <PasswordInput
+          id="reg-pw-confirm"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirmez le mot de passe"
+          required
+        />
+      </div>
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
         Continuer vers le paiement
       </Button>
     </form>
   )
 }
 
-function MvolaPayment({ onValidated }: { onValidated: () => void }) {
+function PaymentStep({ onValidated }: { onValidated: () => void }) {
+  const [methods, setMethods] = useState<PaymentMethod[]>([])
+  const [loadingMethods, setLoadingMethods] = useState(true)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [reference, setReference] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function copyNumber() {
-    navigator.clipboard?.writeText(BRAND.mvolaNumber.replace(/\s/g, ''))
-    toast.success('Numéro copié')
+  useEffect(() => {
+    getActivePaymentMethods()
+      .then((data) => {
+        setMethods(data)
+        setSelectedId(data[0]?.id ?? null)
+      })
+      .catch((err) => console.error('Erreur chargement moyens de paiement:', err))
+      .finally(() => setLoadingMethods(false))
+  }, [])
+
+  const selected = methods.find((m) => m.id === selectedId)
+
+  function copyDetails() {
+    if (!selected) return
+    navigator.clipboard?.writeText(selected.accountDetails)
+    toast.success('Copie')
   }
 
   function validate(e: React.FormEvent) {
     e.preventDefault()
-    if (!reference.trim()) return
+    if (!reference.trim() || !selected) return
     setLoading(true)
     setTimeout(() => {
       playBip()
-      toast.success('Paiement validé', {
-        description: 'Votre accès à i-tafa a été activé.',
+      toast.success('Paiement valide', {
+        description: 'Votre acces a i-tafa a ete active.',
       })
       onValidated()
     }, 900)
   }
 
+  if (loadingMethods) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+      </div>
+    )
+  }
+
+  if (methods.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        Aucun moyen de paiement disponible pour le moment. Contactez {BRAND.owner}.
+      </p>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="flex flex-col gap-3 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-            <Smartphone className="size-4" aria-hidden="true" />
-            Paiement Mvola
-          </div>
-          <div className="flex items-center justify-between rounded-lg bg-card p-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Numéro Mvola</p>
-              <p className="font-display text-lg font-bold tracking-wide">
-                {BRAND.mvolaNumber}
-              </p>
+      <div className="flex flex-col gap-2">
+        <Label>Choisissez un moyen de paiement</Label>
+        <div className="flex flex-wrap gap-2">
+          {methods.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setSelectedId(m.id)}
+              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                selectedId === m.id
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-card text-foreground hover:bg-muted'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selected && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex flex-col gap-3 p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+              <Smartphone className="size-4" aria-hidden="true" />
+              {selected.label}
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={copyNumber} className="gap-1.5">
-              <Copy className="size-3.5" aria-hidden="true" />
-              Copier
-            </Button>
-          </div>
-          <div className="rounded-lg bg-card p-3">
-            <p className="text-xs text-muted-foreground">Titulaire du compte</p>
-            <p className="font-semibold">{BRAND.owner}</p>
-          </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Effectuez votre paiement Mvola au numéro ci-dessus, puis saisissez la
-            référence de la transaction pour activer votre accès.
-          </p>
-        </CardContent>
-      </Card>
+            <div className="flex items-center justify-between rounded-lg bg-card p-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Coordonnees</p>
+                <p className="font-display text-base font-bold tracking-wide">
+                  {selected.accountDetails}
+                </p>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={copyDetails} className="gap-1.5">
+                <Copy className="size-3.5" aria-hidden="true" />
+                Copier
+              </Button>
+            </div>
+            {selected.instructions && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {selected.instructions}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <form onSubmit={validate} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="ref">Référence de la transaction</Label>
+          <Label htmlFor="ref">Reference de la transaction</Label>
           <Input
             id="ref"
             value={reference}
@@ -400,14 +510,14 @@ function RegisterDone({ onEnter }: { onEnter: () => void }) {
         <BellRing className="size-8" aria-hidden="true" />
       </span>
       <div>
-        <h3 className="font-display text-xl font-bold">Accès activé !</h3>
+        <h3 className="font-display text-xl font-bold">Acces active !</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Un bip de confirmation a été émis et votre accès à i-tafa est prêt.
-          Vous pouvez maintenant compléter votre profil.
+          Un bip de confirmation a ete emis et votre acces a i-tafa est pret.
+          Vous pouvez maintenant completer votre profil.
         </p>
       </div>
       <Button className="w-full" onClick={onEnter}>
-        Accéder à mon espace
+        Acceder a mon espace
       </Button>
     </div>
   )
@@ -423,18 +533,18 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
         className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Retour à la connexion
+        Retour a la connexion
       </button>
-      <h2 className="font-display text-2xl font-bold">Mot de passe oublié</h2>
+      <h2 className="font-display text-2xl font-bold">Mot de passe oublie</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Saisissez votre e-mail pour recevoir un lien de réinitialisation.
+        Saisissez votre e-mail pour recevoir un lien de reinitialisation.
       </p>
       {sent ? (
         <div className="mt-6 flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
           <Check className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
           <p className="text-sm leading-relaxed">
-            Si un compte existe pour cette adresse, un lien de réinitialisation
-            vient d&apos;être envoyé.
+            Si un compte existe pour cette adresse, un lien de reinitialisation
+            vient d&apos;etre envoye.
           </p>
         </div>
       ) : (
@@ -454,6 +564,43 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
           </Button>
         </form>
       )}
+    </div>
+  )
+}
+
+function PasswordInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+  required,
+}: {
+  id: string
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  placeholder?: string
+  required?: boolean
+}) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+        className="absolute right-2 top-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        {visible ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+      </button>
     </div>
   )
 }
