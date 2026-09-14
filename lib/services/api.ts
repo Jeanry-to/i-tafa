@@ -355,22 +355,20 @@ export async function updateClientStatus(
 ) {
   const shopId = await getCurrentShopId()
 
-  return throwIfError(
-    await supabase
-      .from('clients')
-      .update({
-        status,
-        shop_id: shopId,
-      })
-      .eq('id', id)
-      .eq('shop_id', shopId)
-      .select()
-      .single(),
-  )
-}
+  const { data, error } = await supabase
+    .from('clients')
+    .update({ status })
+    .eq('id', id)
+    .eq('shop_id', shopId)
+    .select('*')
 
-export async function deleteClient(id: string) {
-  return throwIfError(await supabase.from('clients').delete().eq('id', id))
+  if (error) throw error
+
+  if (!data || data.length === 0) {
+    throw new Error('Client introuvable ou accès refusé.')
+  }
+
+  return data[0]
 }
 
 export async function updateProfile(
