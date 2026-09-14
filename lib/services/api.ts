@@ -1232,19 +1232,29 @@ export async function suspendClient(
 }
 
 export async function reactivateClient(id: string) {
-  return throwIfError(
-    await supabase
-      .from('clients')
-      .update({
-        status: 'actif',
-        suspension_reason: null,
-        suspended_at: null,
-        suspended_until: null,
-      })
-      .eq('id', id)
-      .select()
-      .single(),
-  )
+  const shopId = await getCurrentShopId()
+
+  const { data, error } = await supabase
+    .from('clients')
+    .update({
+      status: 'actif',
+      suspension_reason: null,
+      suspended_at: null,
+      suspended_until: null,
+    })
+    .eq('id', id)
+    .eq('shop_id', shopId)
+    .select('*')
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Client introuvable ou accès refusé par les règles RLS.')
+  }
+
+  return data[0]
 }
 
 // ---------------------------------------------------------------------------
