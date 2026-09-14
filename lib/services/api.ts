@@ -390,6 +390,8 @@ export async function createAnnouncement(values: {
   attachmentName?: string
   attachmentUrl?: string
 }) {
+  const shopId = await getCurrentShopId()
+
   const legacy = legacyAttachment(
     values.attachmentType ?? null,
     values.attachmentName ?? null,
@@ -402,6 +404,7 @@ export async function createAnnouncement(values: {
     await supabase
       .from('announcements')
       .insert({
+        shop_id: shopId,
         author_id: values.authorId,
         title: values.title,
         body: values.body,
@@ -508,12 +511,22 @@ export async function sendMessage(values: {
   const attachments = values.attachments ?? (legacy ? [legacy] : [])
   const firstAttachment = attachments[0] ?? null
 
+  // Le shop_id est obligatoire sur "messages" : on le recupere depuis le client concerne
+  const { data: clientRow, error: clientError } = await supabase
+    .from('clients')
+    .select('shop_id')
+    .eq('id', values.clientId)
+    .single()
+
+  if (clientError) throw new Error(clientError.message)
+
   const row = throwIfError(
     await supabase
       .from('messages')
       .insert({
         client_id: values.clientId,
         sender_id: values.senderId,
+        shop_id: clientRow?.shop_id ?? null,
         body: values.body ?? null,
         attachments,
         attachment_type: firstAttachment?.type ?? null,
