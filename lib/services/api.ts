@@ -349,9 +349,23 @@ export async function getClientForProfile(profileId: string) {
   return data ? mapClient(data) : null
 }
 
-export async function updateClientStatus(id: string, status: ClientStatus) {
+export async function updateClientStatus(
+  id: string,
+  status: ClientStatus
+) {
+  const shopId = await getCurrentShopId()
+
   return throwIfError(
-    await supabase.from('clients').update({ status }).eq('id', id).select().single(),
+    await supabase
+      .from('clients')
+      .update({
+        status,
+        shop_id: shopId,
+      })
+      .eq('id', id)
+      .eq('shop_id', shopId)
+      .select()
+      .single(),
   )
 }
 
