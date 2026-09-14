@@ -1,83 +1,110 @@
 'use client'
 
-import { useState } from 'react'
-import { Camera, Loader2, MapPin, ShieldCheck, Smartphone } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Eye, EyeOff, Loader2, MapPin, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { currentClient } from '@/lib/mock-data'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { supabase } from '@/lib/supabase'
+import { getCurrentProfile, updateProfile } from '@/lib/services/api'
+
+type ProfileData = {
+  id: string
+  full_name: string
+  email: string
+  phone: string | null
+  address: string | null
+  pseudo?: string | null
+}
 
 export function ProfileForm() {
-  const [loading, setLoading] = useState(false)
-  const [photoName, setPhotoName] = useState<string | null>(null)
-  const [address, setAddress] = useState(currentClient.address)
+  const [profile, setProfile] = useState<ProfileData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const complete = Boolean(photoName) && address.trim().length > 0
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
 
-  function save(e: React.FormEvent) {
+  useEffect(() => {
+    getCurrentProfile()
+      .then((data) => {
+        if (data) {
+          setProfile(data)
+          setFullName(data.full_name ?? '')
+          setPhone(data.phone ?? '')
+          setAddress(data.address ?? '')
+        }
+      })
+      .catch((err) => console.error('Erreur chargement profil:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const complete = fullName.trim().length > 0 && address.trim().length > 0
+
+  async function saveProfile(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      toast.success('Profil enregistré')
-    }, 700)
+    if (!profile) return
+    setSavingProfile(true)
+    try {
+      await updateProfile(profile.id, {
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+      })
+      toast.success('Profil enregistre')
+    } catch (err) {
+      toast.error('Enregistrement impossible', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+      </div>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        Impossible de charger votre profil. Reconnectez-vous.
+      </p>
+    )
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <form onSubmit={save} className="lg:col-span-2">
+      <form onSubmit={saveProfile} className="lg:col-span-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Informations du profil</CardTitle>
             <p className="text-sm text-muted-foreground">
-              La photo de profil et l&apos;adresse physique sont obligatoires.
+              Le nom complet et l&apos;adresse physique sont recommandes.
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            {/* Photo */}
-            <div className="flex flex-col gap-2">
-              <Label>Photo de profil</Label>
-              <div className="flex items-center gap-4">
-                <div className="flex size-20 items-center justify-center overflow-hidden rounded-full border border-dashed border-border bg-muted text-muted-foreground">
-                  {photoName ? (
-                    <span className="px-2 text-center text-[10px] font-medium leading-tight">
-                      {photoName}
-                    </span>
-                  ) : (
-                    <Camera className="size-6" aria-hidden="true" />
-                  )}
-                </div>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={(e) =>
-                      setPhotoName(e.target.files?.[0]?.name ?? 'photo-profil.jpg')
-                    }
-                  />
-                  <span className="inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium">
-                    Choisir une photo
-                  </span>
-                </label>
-              </div>
-            </div>
-
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Nom complet</Label>
-              <Input id="name" defaultValue={currentClient.name} />
+              <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="email">Adresse e-mail</Label>
-                <Input id="email" type="email" defaultValue={currentClient.email} />
+                <Input id="email" type="email" value={profile.email} disabled />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="phone">Téléphone</Label>
-                <Input id="phone" defaultValue={currentClient.phone} />
+                <Label htmlFor="phone">Telephone</Label>
+                <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
             </div>
 
@@ -91,7 +118,6 @@ export function ProfileForm() {
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="Lot, quartier, ville"
-                required
               />
             </div>
 
@@ -99,10 +125,10 @@ export function ProfileForm() {
               <span
                 className={`text-xs font-medium ${complete ? 'text-primary' : 'text-muted-foreground'}`}
               >
-                {complete ? 'Profil complet' : 'Champs obligatoires manquants'}
+                {complete ? 'Profil complet' : 'Champs recommandes manquants'}
               </span>
-              <Button type="submit" disabled={loading}>
-                {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+              <Button type="submit" disabled={savingProfile}>
+                {savingProfile && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                 Enregistrer
               </Button>
             </div>
@@ -111,33 +137,114 @@ export function ProfileForm() {
       </form>
 
       <div className="flex flex-col gap-6">
+        <PasswordSection />
+
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Sécurité</CardTitle>
+            <CardTitle className="text-base">Apparence</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="new-pw">Modifier le mot de passe</Label>
-              <Input id="new-pw" type="password" placeholder="Nouveau mot de passe" />
-              <Input type="password" placeholder="Confirmer le mot de passe" />
-              <Button variant="secondary" size="sm" className="mt-1 w-full">
-                Mettre à jour le mot de passe
-              </Button>
-            </div>
-            <div className="flex items-start gap-2 rounded-lg bg-secondary/60 p-3 text-xs leading-relaxed text-secondary-foreground">
-              <Smartphone className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              <span>
-                Appareil actuel : {currentClient.device}. Une connexion sur un
-                autre appareil fermera automatiquement celui-ci.
-              </span>
-            </div>
-            <div className="flex items-start gap-2 rounded-lg bg-primary/5 p-3 text-xs leading-relaxed text-primary">
-              <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              <span>Connexion sécurisée active sur un seul appareil.</span>
-            </div>
+          <CardContent>
+            <ThemeToggle />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-start gap-2 rounded-lg bg-primary/5 p-3 text-xs leading-relaxed text-primary">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <span>Connexion securisee active sur ce compte.</span>
           </CardContent>
         </Card>
       </div>
+    </div>
+  )
+}
+
+function PasswordSection() {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (newPassword.length < 6) {
+      toast.error('Le mot de passe doit contenir au moins 6 caracteres')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Les mots de passe ne correspondent pas')
+      return
+    }
+    setSaving(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw new Error(error.message)
+      toast.success('Mot de passe mis a jour')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      toast.error('Mise a jour impossible', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Securite</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={changePassword} className="flex flex-col gap-3">
+          <Label htmlFor="new-pw">Nouveau mot de passe</Label>
+          <PasswordField id="new-pw" value={newPassword} onChange={setNewPassword} placeholder="Nouveau mot de passe" />
+          <PasswordField
+            id="confirm-pw"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            placeholder="Confirmer le mot de passe"
+          />
+          <Button type="submit" variant="secondary" size="sm" className="mt-1 w-full" disabled={saving}>
+            {saving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+            Mettre a jour le mot de passe
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+function PasswordField({
+  id,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+}) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+        className="absolute right-2 top-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        {visible ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+      </button>
     </div>
   )
 }

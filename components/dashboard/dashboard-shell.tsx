@@ -1,11 +1,13 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { LogOut, Menu, X, type LucideIcon } from 'lucide-react'
 import { BrandLogo } from '@/components/brand-logo'
 import { InitialsAvatar } from '@/components/initials-avatar'
 import { Button } from '@/components/ui/button'
+import { signOut } from '@/lib/services/api'
 import { cn } from '@/lib/utils'
 
 export type NavItem = {
@@ -33,6 +35,7 @@ export function DashboardShell({
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const router = useRouter()
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-1" aria-label="Navigation principale">
@@ -92,14 +95,18 @@ export function DashboardShell({
         </div>
       </div>
       <Button
-        asChild
         variant="ghost"
         className="mt-2 justify-start gap-3 px-3 text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+        onClick={async () => {
+          try {
+            await signOut()
+          } finally {
+            router.push('/')
+          }
+        }}
       >
-        <Link href="/">
-          <LogOut className="size-4.5" aria-hidden="true" />
-          Se déconnecter
-        </Link>
+        <LogOut className="size-4.5" aria-hidden="true" />
+        Se déconnecter
       </Button>
     </>
   )

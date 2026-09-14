@@ -1,41 +1,78 @@
-'use client'
+﻿'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   BookOpen,
+  Boxes,
+  Bot,
+  BrainCircuit,
+  Building2,
+  CreditCard,
   LayoutDashboard,
   Megaphone,
   MessageCircle,
+  Settings,
+  Store,
   UsersRound,
 } from 'lucide-react'
+import { AdminAgentSettings } from '@/components/admin/admin-agent-settings'
+import { AdminBusinessInfo } from '@/components/admin/admin-business-info'
+import { AdminKnowledgeBase } from '@/components/admin/admin-knowledge-base'
 import { AdminMessages } from '@/components/admin/admin-messages'
+import { AdminPaymentMethods } from '@/components/admin/admin-payment-methods'
+import { AdminProducts } from '@/components/admin/admin-products'
+import { AdminSettings } from '@/components/admin/admin-settings'
 import { AdminTutorial } from '@/components/admin/admin-tutorial'
 import { AnnouncementComposer } from '@/components/admin/announcement-composer'
 import { ClientManagement } from '@/components/admin/client-management'
+import { SuperAdminShops } from '@/components/admin/super-admin-shops'
 import { DashboardShell, type NavItem } from '@/components/dashboard/dashboard-shell'
 import { RulesCard } from '@/components/rules-card'
 import { Card, CardContent } from '@/components/ui/card'
-import { BRAND, clients } from '@/lib/mock-data'
+import { BRAND } from '@/lib/mock-data'
+import { supabase } from '@/lib/supabase'
+import { applyTheme, getStoredTheme } from '@/lib/theme'
 
 const nav: NavItem[] = [
   { id: 'overview', label: 'Tableau de bord', icon: LayoutDashboard },
   { id: 'annonces', label: 'Annonces', icon: Megaphone },
-  { id: 'messages', label: 'Messages', icon: MessageCircle, badge: 3 },
+  { id: 'messages', label: 'Messages', icon: MessageCircle },
   { id: 'clients', label: 'Clients', icon: UsersRound },
+  { id: 'activite', label: 'Mon activite', icon: Building2 },
+  { id: 'produits', label: 'Produits & Services', icon: Boxes },
+  { id: 'connaissances', label: 'Base de connaissances', icon: BrainCircuit },
+  { id: 'agent-ia', label: 'Agent IA', icon: Bot },
+  { id: 'paiement', label: 'Paiement', icon: CreditCard },
+  { id: 'boutiques', label: 'Boutiques (Super-Admin)', icon: Store },
+  { id: 'parametres', label: 'Parametres', icon: Settings },
   { id: 'tutoriel', label: 'Tutoriel', icon: BookOpen },
 ]
 
 const titles: Record<string, { title: string; subtitle: string }> = {
-  overview: { title: 'Tableau de bord', subtitle: 'Vue d’ensemble de votre activité i-tafa.' },
-  annonces: { title: 'Annonces', subtitle: 'Publiez sur le canal officiel en lecture seule.' },
-  messages: { title: 'Messages', subtitle: 'Discussions privées avec vos clients.' },
-  clients: { title: 'Clients', subtitle: 'Gérez, contactez et modérez vos clients.' },
-  tutoriel: { title: 'Tutoriel', subtitle: 'Guide pratique de gestion du site.' },
+  overview: { title: 'Tableau de bord', subtitle: 'Vue ensemble de votre activite.' },
+  annonces: { title: 'Annonces', subtitle: 'Publiez sur le canal officiel.' },
+  messages: { title: 'Messages', subtitle: 'Discussions privees avec vos clients.' },
+  clients: { title: 'Clients', subtitle: 'Gerez vos clients.' },
+  activite: { title: 'Mon activite', subtitle: 'Informations generales de votre entreprise.' },
+  produits: { title: 'Produits & Services', subtitle: 'Gerez ce que vous proposez a vos clients.' },
+  connaissances: { title: 'Base de connaissances', subtitle: 'Ce que votre Agent IA doit savoir.' },
+  'agent-ia': { title: 'Agent IA', subtitle: 'Configurez le comportement de votre Agent IA.' },
+  paiement: { title: 'Paiement', subtitle: 'Gerez vos moyens de paiement.' },
+  boutiques: {
+    title: 'Boutiques (Super-Admin)',
+    subtitle: 'Surveillez et gerez les abonnements de toutes les boutiques i-tafa.',
+  },
+  parametres: { title: 'Parametres', subtitle: 'Gerez votre compte administrateur.' },
+  tutoriel: { title: 'Tutoriel', subtitle: 'Guide pratique.' },
 }
 
 export function AdminDashboard() {
   const [active, setActive] = useState('overview')
-  const head = titles[active]
+  const head = titles[active] || titles.overview
+
+  useEffect(() => {
+    applyTheme(getStoredTheme())
+  }, [])
 
   return (
     <DashboardShell
@@ -43,7 +80,7 @@ export function AdminDashboard() {
       activeId={active}
       onNavigate={setActive}
       roleLabel="Espace admin"
-      userName={BRAND.owner}
+      userName="Admin"
       userMeta="Administrateur i-tafa"
     >
       <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8 lg:py-8">
@@ -56,6 +93,13 @@ export function AdminDashboard() {
         {active === 'annonces' && <AnnouncementComposer />}
         {active === 'messages' && <AdminMessages />}
         {active === 'clients' && <ClientManagement />}
+        {active === 'activite' && <AdminBusinessInfo />}
+        {active === 'produits' && <AdminProducts />}
+        {active === 'connaissances' && <AdminKnowledgeBase />}
+        {active === 'agent-ia' && <AdminAgentSettings />}
+        {active === 'paiement' && <AdminPaymentMethods />}
+        {active === 'boutiques' && <SuperAdminShops />}
+        {active === 'parametres' && <AdminSettings />}
         {active === 'tutoriel' && <AdminTutorial />}
       </div>
     </DashboardShell>
@@ -63,13 +107,33 @@ export function AdminDashboard() {
 }
 
 function Overview({ onNavigate }: { onNavigate: (id: string) => void }) {
-  const activeCount = clients.filter((c) => c.status === 'actif').length
-  const unread = clients.reduce((n, c) => n + c.unread, 0)
+  const [statsData, setStatsData] = useState({ activeCount: 0, totalCount: 0, unreadCount: 0 })
+
+  useEffect(() => {
+    async function loadRealStats() {
+      try {
+        const { data: clients, error } = await supabase
+          .from('clients')
+          .select('status')
+
+        if (error) throw error
+
+        if (clients) {
+          const total = clients.length
+          const active = clients.filter((c: any) => c.status === 'actif').length
+          setStatsData({ totalCount: total, activeCount: active, unreadCount: 0 })
+        }
+      } catch (err) {
+        console.error('Erreur lors du calcul des stats:', err)
+      }
+    }
+    loadRealStats()
+  }, [])
 
   const stats = [
-    { label: 'Clients actifs', value: activeCount, hint: `${clients.length} au total` },
-    { label: 'Messages non lus', value: unread, hint: 'à traiter' },
-    { label: 'Annonces publiées', value: 3, hint: 'ce mois-ci' },
+    { label: 'Clients actifs', value: statsData.activeCount, hint: statsData.totalCount + ' au total' },
+    { label: 'Messages non lus', value: statsData.unreadCount, hint: 'a traiter' },
+    { label: 'Annonces publiees', value: 0, hint: 'ce mois-ci' },
   ]
 
   return (
@@ -99,12 +163,12 @@ function Overview({ onNavigate }: { onNavigate: (id: string) => void }) {
                 />
                 <QuickAction
                   icon={MessageCircle}
-                  title="Répondre aux messages"
+                  title="Repondre aux messages"
                   onClick={() => onNavigate('messages')}
                 />
                 <QuickAction
                   icon={UsersRound}
-                  title="Gérer les clients"
+                  title="Gerer les clients"
                   onClick={() => onNavigate('clients')}
                 />
                 <QuickAction
