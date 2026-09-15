@@ -1,39 +1,5 @@
 ﻿import * as tus from 'tus-js-client'
 import { supabase } from '@/lib/supabase'
-/**
- * Récupère l'identifiant de la boutique appartenant
- * à l'utilisateur actuellement connecté.
- */
-export async function getCurrentShopId(): Promise<string> {
-  const { data: userData, error: userError } =
-    await supabase.auth.getUser()
-
-  if (userError) {
-    throw new Error(userError.message)
-  }
-
-  if (!userData.user) {
-    throw new Error('Vous devez être connecté pour accéder à votre boutique.')
-  }
-
-  const { data: shop, error: shopError } = await supabase
-    .from('shops')
-    .select('id')
-    .eq('owner_id', userData.user.id)
-    .single()
-
-  if (shopError) {
-    throw new Error(
-      `Impossible de récupérer votre boutique : ${shopError.message}`,
-    )
-  }
-
-  if (!shop) {
-    throw new Error('Aucune boutique n’est associée à votre compte.')
-  }
-
-  return shop.id
-}
 
 export type ClientStatus = 'actif' | 'suspendu'
 export type AttachmentType = 'image' | 'video' | 'file'
@@ -322,6 +288,27 @@ export async function getCurrentProfile() {
   )
 }
 
+/**
+ * Récupère la boutique de l'utilisateur actuellement connecté.
+ * Toutes les créations de données multi-tenant utilisent cet identifiant.
+ */
+export async function getCurrentShopId(): Promise<string> {
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError) throw new Error(userError.message)
+  if (!userData.user) throw new Error('Vous devez être connecté pour effectuer cette action.')
+
+  const { data: shop, error: shopError } = await supabase
+    .from('shops')
+    .select('id')
+    .eq('owner_id', userData.user.id)
+    .maybeSingle()
+
+  if (shopError) throw new Error(shopError.message)
+  if (!shop?.id) throw new Error('Aucune boutique n’est associée à votre compte.')
+
+  return shop.id
+}
+
 export async function getClients() {
   const data = throwIfError(
     await supabase
@@ -349,26 +336,14 @@ export async function getClientForProfile(profileId: string) {
   return data ? mapClient(data) : null
 }
 
-export async function updateClientStatus(
-  id: string,
-  status: ClientStatus
-) {
-  const shopId = await getCurrentShopId()
+export async function updateClientStatus(id: string, status: ClientStatus) {
+  return throwIfError(
+    await supabase.from('clients').update({ status }).eq('id', id).select().single(),
+  )
+}
 
-  const { data, error } = await supabase
-    .from('clients')
-    .update({ status })
-    .eq('id', id)
-    .eq('shop_id', shopId)
-    .select('*')
-
-  if (error) throw error
-
-  if (!data || data.length === 0) {
-    throw new Error('Client introuvable ou accès refusé.')
-  }
-
-  return data[0]
+export async function deleteClient(id: string) {
+  return throwIfError(await supabase.from('clients').delete().eq('id', id))
 }
 
 export async function updateProfile(
@@ -402,8 +377,6 @@ export async function createAnnouncement(values: {
   attachmentName?: string
   attachmentUrl?: string
 }) {
-  const shopId = await getCurrentShopId()
-
   const legacy = legacyAttachment(
     values.attachmentType ?? null,
     values.attachmentName ?? null,
@@ -416,7 +389,7 @@ export async function createAnnouncement(values: {
     await supabase
       .from('announcements')
       .insert({
-        shop_id: shopId,
+        shop_id: await getCurrentShopId(),
         author_id: values.authorId,
         title: values.title,
         body: values.body,
@@ -523,22 +496,13 @@ export async function sendMessage(values: {
   const attachments = values.attachments ?? (legacy ? [legacy] : [])
   const firstAttachment = attachments[0] ?? null
 
-  // Le shop_id est obligatoire sur "messages" : on le recupere depuis le client concerne
-  const { data: clientRow, error: clientError } = await supabase
-    .from('clients')
-    .select('shop_id')
-    .eq('id', values.clientId)
-    .single()
-
-  if (clientError) throw new Error(clientError.message)
-
   const row = throwIfError(
     await supabase
       .from('messages')
       .insert({
+        shop_id: await getCurrentShopId(),
         client_id: values.clientId,
         sender_id: values.senderId,
-        shop_id: clientRow?.shop_id ?? null,
         body: values.body ?? null,
         attachments,
         attachment_type: firstAttachment?.type ?? null,
@@ -792,13 +756,11 @@ export async function createPaymentMethod(values: {
   instructions?: string
   sortOrder?: number
 }) {
-  const shopId = await getCurrentShopId()
-
   const row = throwIfError(
     await supabase
       .from('payment_methods')
       .insert({
-        shop_id: shopId,
+        shop_id: await getCurrentShopId(),
         type: values.type,
         label: values.label,
         account_details: values.accountDetails,
@@ -939,27 +901,14 @@ function mapBusinessInfo(row: BusinessInfoRow): BusinessInfo {
 }
 
 export async function getBusinessInfo(): Promise<BusinessInfo | null> {
-  const shopId = await getCurrentShopId()
-
-  const { data, error } = await supabase
-    .from('business_info')
-    .select('*')
-    .eq('shop_id', shopId)
-    .maybeSingle()
-
+  const { data, error } = await supabase.from('business_info').select('*').limit(1).maybeSingle()
   if (error) throw new Error(error.message)
-
   return data ? mapBusinessInfo(data as BusinessInfoRow) : null
 }
 
-export async function saveBusinessInfo(
-  values: Omit<BusinessInfo, 'id'>
-) {
-  const shopId = await getCurrentShopId()
+export async function saveBusinessInfo(values: Omit<BusinessInfo, 'id'>) {
   const existing = await getBusinessInfo()
-
   const payload = {
-    shop_id: shopId,
     name: values.name,
     description: values.description,
     sector: values.sector,
@@ -976,20 +925,14 @@ export async function saveBusinessInfo(
 
   if (existing) {
     return throwIfError(
-      await supabase
-        .from('business_info')
-        .update(payload)
-        .eq('id', existing.id)
-        .eq('shop_id', shopId)
-        .select()
-        .single(),
+      await supabase.from('business_info').update(payload).eq('id', existing.id).select().single(),
     )
   }
 
   return throwIfError(
     await supabase
       .from('business_info')
-      .insert(payload)
+      .insert({ shop_id: await getCurrentShopId(), ...payload })
       .select()
       .single(),
   )
@@ -1054,6 +997,7 @@ export async function createProduct(values: Omit<Product, 'id'>) {
     await supabase
       .from('products')
       .insert({
+        shop_id: await getCurrentShopId(),
         name: values.name,
         description: values.description,
         price: values.price,
@@ -1131,7 +1075,11 @@ export async function getKnowledgeBase() {
 
 export async function createKnowledgeItem(values: { category: string; title: string; content: string }) {
   const row = throwIfError(
-    await supabase.from('knowledge_base').insert(values).select().single(),
+    await supabase
+      .from('knowledge_base')
+      .insert({ shop_id: await getCurrentShopId(), ...values })
+      .select()
+      .single(),
   ) as KnowledgeRow
   return mapKnowledge(row)
 }
@@ -1169,7 +1117,13 @@ export async function getFaqs() {
 }
 
 export async function createFaq(values: { question: string; answer: string }) {
-  return throwIfError(await supabase.from('faqs').insert(values).select().single())
+  return throwIfError(
+    await supabase
+      .from('faqs')
+      .insert({ shop_id: await getCurrentShopId(), ...values })
+      .select()
+      .single(),
+  )
 }
 
 export async function updateFaq(id: string, values: Partial<{ question: string; answer: string }>) {
@@ -1235,29 +1189,19 @@ export async function suspendClient(
 }
 
 export async function reactivateClient(id: string) {
-  const shopId = await getCurrentShopId()
-
-  const { data, error } = await supabase
-    .from('clients')
-    .update({
-      status: 'actif',
-      suspension_reason: null,
-      suspended_at: null,
-      suspended_until: null,
-    })
-    .eq('id', id)
-    .eq('shop_id', shopId)
-    .select('*')
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  if (!data || data.length === 0) {
-    throw new Error('Client introuvable ou accès refusé par les règles RLS.')
-  }
-
-  return data[0]
+  return throwIfError(
+    await supabase
+      .from('clients')
+      .update({
+        status: 'actif',
+        suspension_reason: null,
+        suspended_at: null,
+        suspended_until: null,
+      })
+      .eq('id', id)
+      .select()
+      .single(),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -1336,7 +1280,13 @@ export async function saveAgentSettings(values: Omit<AgentSettings, 'id'>) {
       await supabase.from('agent_settings').update(payload).eq('id', existing.id).select().single(),
     )
   }
-  return throwIfError(await supabase.from('agent_settings').insert(payload).select().single())
+  return throwIfError(
+    await supabase
+      .from('agent_settings')
+      .insert({ shop_id: await getCurrentShopId(), ...payload })
+      .select()
+      .single(),
+  )
 }
 
 // Met a jour uniquement le champ "language" de agent_settings, utilisee a la
@@ -1354,7 +1304,11 @@ export async function updateAgentLanguage(language: AgentLanguage) {
     )
   }
   return throwIfError(
-    await supabase.from('agent_settings').insert({ language }).select().single(),
+    await supabase
+      .from('agent_settings')
+      .insert({ shop_id: await getCurrentShopId(), language })
+      .select()
+      .single(),
   )
 }
 
