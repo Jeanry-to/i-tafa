@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ThemeToggle } from '@/components/theme-toggle'
+ import { AccentColorPicker } from '@/components/accent-color-picker'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProfile, updateProfile } from '@/lib/services/api'
 
@@ -139,12 +140,13 @@ export function ProfileForm() {
       <div className="flex flex-col gap-6">
         <PasswordSection />
 
-        <Card>
+                <Card>
           <CardHeader>
             <CardTitle className="text-base">Apparence</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
             <ThemeToggle />
+            <AccentColorPicker />
           </CardContent>
         </Card>
 
