@@ -792,10 +792,13 @@ export async function createPaymentMethod(values: {
   instructions?: string
   sortOrder?: number
 }) {
+  const shopId = await getCurrentShopId()
+
   const row = throwIfError(
     await supabase
       .from('payment_methods')
       .insert({
+        shop_id: shopId,
         type: values.type,
         label: values.label,
         account_details: values.accountDetails,
