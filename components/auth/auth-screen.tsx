@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -32,6 +32,8 @@ import {
   getClientForProfile,
   isClientSuspended,
   getActivePaymentMethods,
+  isClientPending,
+  submitPaymentReference,
   type PaymentMethod,
 } from '@/lib/services/api'
 import { playBip } from '@/lib/beep'
@@ -104,6 +106,11 @@ export function AuthScreen() {
               onForgot={() => setMode('forgot')}
               onEnterClient={() => router.push('/client')}
               onEnterAdmin={() => router.push('/admin')}
+              onRegisterComplete={async () => {
+                await signOut()
+                router.push('/')
+                router.refresh()
+              }}
             />
           )}
         </div>
@@ -116,10 +123,12 @@ function AuthTabs({
   onForgot,
   onEnterClient,
   onEnterAdmin,
+  onRegisterComplete,
 }: {
   onForgot: () => void
   onEnterClient: () => void
   onEnterAdmin: () => void
+  onRegisterComplete: () => void
 }) {
   return (
     <>
@@ -145,7 +154,7 @@ function AuthTabs({
         </TabsContent>
 
         <TabsContent value="register" className="mt-6">
-          <RegisterFlow onSuccess={onEnterClient} />
+          <RegisterFlow onSuccess={onRegisterComplete} />
         </TabsContent>
       </Tabs>
     </>
@@ -180,6 +189,14 @@ function LoginForm({
       } else {
         const client = profile ? await getClientForProfile(profile.id) : null
 
+        if (client && isClientPending(client)) {
+          await signOut()
+          toast.error('Compte en attente de validation', {
+            description: 'Votre paiement est en cours de verification par un administrateur.',
+          })
+          return
+        }
+
         if (client && isClientSuspended(client)) {
           await signOut()
           const until = client.suspendedUntil
@@ -189,7 +206,7 @@ function LoginForm({
             description: [
               client.suspensionReason ? `Motif : ${client.suspensionReason}` : 'Votre acces est suspendu.',
               until ? `Fin prevue : ${until}` : 'Sans date de fin.',
-            ].join(' — '),
+            ].join(' â€” '),
           })
           return
         }
@@ -429,17 +446,32 @@ function PaymentStep({ onValidated }: { onValidated: () => void }) {
     toast.success('Copie')
   }
 
-  function validate(e: React.FormEvent) {
+  async function validate(e: React.FormEvent) {
     e.preventDefault()
     if (!reference.trim() || !selected) return
     setLoading(true)
-    setTimeout(() => {
+    try {
+      const profile = await getCurrentProfile()
+      const client = profile ? await getClientForProfile(profile.id) : null
+      if (!client) {
+        throw new Error('Client introuvable, reessayez de vous inscrire.')
+      }
+      await submitPaymentReference(client.id, {
+        method: selected.label,
+        reference,
+      })
       playBip()
-      toast.success('Paiement valide', {
-        description: 'Votre acces a i-tafa a ete active.',
+      toast.success('Reference enregistree', {
+        description: 'Un administrateur va verifier votre paiement et activer votre compte.',
       })
       onValidated()
-    }, 900)
+    } catch (error) {
+      toast.error('Enregistrement impossible', {
+        description: error instanceof Error ? error.message : 'Reessayez.',
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (loadingMethods) {
@@ -535,14 +567,14 @@ function RegisterDone({ onEnter }: { onEnter: () => void }) {
         <BellRing className="size-8" aria-hidden="true" />
       </span>
       <div>
-        <h3 className="font-display text-xl font-bold">Acces active !</h3>
+        <h3 className="font-display text-xl font-bold">Paiement enregistre - en attente de validation</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
           Un bip de confirmation a ete emis et votre acces a i-tafa est pret.
           Vous pouvez maintenant completer votre profil.
         </p>
       </div>
       <Button className="w-full" onClick={onEnter}>
-        Acceder a mon espace
+        Retour a la connexion
       </Button>
     </div>
   )
@@ -639,3 +671,11 @@ function Divider() {
     </div>
   )
 }
+
+
+
+
+
+
+
+

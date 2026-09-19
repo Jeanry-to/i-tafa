@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+﻿import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
@@ -36,7 +36,7 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Vérifie la session Supabase
+  // Verifie la session Supabase
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -48,7 +48,7 @@ export async function proxy(request: NextRequest) {
   // =====================================================
 
   if (pathname.startsWith('/admin')) {
-    // Pas connecté
+    // Pas connecte
     if (!user) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
@@ -56,10 +56,10 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
 
-    // Récupère le rôle depuis profiles
+    // Recupere le role et le statut super admin depuis profiles
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, is_super_admin')
       .eq('id', user.id)
       .single()
 
@@ -70,8 +70,10 @@ export async function proxy(request: NextRequest) {
       )
     }
 
-    // Client ou autre rôle = interdit
-    if (profile.role !== 'admin') {
+    const isAllowed = profile.role === 'admin' || profile.is_super_admin === true
+
+    // Ni admin ni super admin = interdit
+    if (!isAllowed) {
       return NextResponse.redirect(
         new URL('/client', request.url)
       )
@@ -83,7 +85,7 @@ export async function proxy(request: NextRequest) {
   // =====================================================
 
   if (pathname.startsWith('/client')) {
-    // Pas connecté
+    // Pas connecte
     if (!user) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
@@ -91,10 +93,10 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
 
-    // Récupère le rôle
+    // Recupere le role et le statut super admin
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, is_super_admin')
       .eq('id', user.id)
       .single()
 
@@ -104,10 +106,23 @@ export async function proxy(request: NextRequest) {
       )
     }
 
-    // Admin = espace admin
-    if (profile.role === 'admin') {
+    // Admin ou super admin = espace admin
+    if (profile.role === 'admin' || profile.is_super_admin === true) {
       return NextResponse.redirect(
         new URL('/admin', request.url)
+      )
+    }
+
+    // Verifie le statut du client (actif uniquement)
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('status')
+      .eq('profile_id', user.id)
+      .maybeSingle()
+
+    if (!clientRow || clientRow.status !== 'actif') {
+      return NextResponse.redirect(
+        new URL('/', request.url)
       )
     }
   }
@@ -121,3 +136,6 @@ export const config = {
     '/client/:path*',
   ],
 }
+
+
+
