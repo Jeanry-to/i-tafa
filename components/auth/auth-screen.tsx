@@ -872,7 +872,7 @@ function ForgotPassword({
         await import('@/lib/supabase')
 
       const redirectTo =
-        `${window.location.origin}/reset-password`
+        `${window.location.origin}/auth/callback?next=/reset-password`
 
       const { error } =
         await supabase.auth.resetPasswordForEmail(

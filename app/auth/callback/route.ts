@@ -3,8 +3,14 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
-  const code = searchParams.get("code")
+  const requestUrl = new URL(request.url)
+  const code = requestUrl.searchParams.get("code")
+  const next = requestUrl.searchParams.get("next")
+
+  const redirectPath =
+    next && next.startsWith("/")
+      ? next
+      : "/admin"
 
   if (code) {
     const cookieStore = await cookies()
@@ -18,16 +24,38 @@ export async function GET(request: Request) {
             return cookieStore.getAll()
           },
           setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
-            })
+            cookiesToSet.forEach(
+              ({ name, value, options }) => {
+                cookieStore.set(
+                  name,
+                  value,
+                  options,
+                )
+              },
+            )
           },
         },
-      }
+      },
     )
 
-    await supabase.auth.exchangeCodeForSession(code)
+    const { error } =
+      await supabase.auth.exchangeCodeForSession(
+        code,
+      )
+
+    if (error) {
+      console.error(
+        "Erreur exchangeCodeForSession:",
+        error,
+      )
+
+      return NextResponse.redirect(
+        `${requestUrl.origin}/login?error=auth_callback`,
+      )
+    }
   }
 
-  return NextResponse.redirect(`${origin}/admin`)
+  return NextResponse.redirect(
+    `${requestUrl.origin}${redirectPath}`,
+  )
 }
