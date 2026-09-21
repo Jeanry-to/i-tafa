@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
@@ -27,6 +27,7 @@ const empty: Omit<AgentSettings, 'id'> = {
   priorityInfo: '',
   forbiddenInfo: '',
   customInstructions: '',
+  autoReplyEnabled: false,
 }
 
 const TONE_OPTIONS: { value: AgentTone; label: string }[] = [
@@ -43,13 +44,13 @@ const FORMALITY_OPTIONS: { value: AgentFormality; label: string }[] = [
 ]
 
 const LENGTH_OPTIONS: { value: AgentResponseLength; label: string }[] = [
-  { value: 'courte', label: 'Courte (1 à 3 phrases)' },
+  { value: 'courte', label: 'Courte (1 Ã  3 phrases)' },
   { value: 'moyenne', label: 'Moyenne' },
-  { value: 'detaillee', label: 'Détaillée' },
+  { value: 'detaillee', label: 'DÃ©taillÃ©e' },
 ]
 
 const LANGUAGE_OPTIONS: { value: AgentLanguage; label: string }[] = [
-  { value: 'fr', label: 'Français' },
+  { value: 'fr', label: 'FranÃ§ais' },
   { value: 'mg', label: 'Malagasy' },
   { value: 'en', label: 'Anglais' },
   { value: 'auto', label: 'Automatique (langue du client)' },
@@ -81,7 +82,7 @@ export function AdminAgentSettings() {
     setSaving(true)
     try {
       await saveAgentSettings(values)
-      toast.success('Comportement de l\u2019Agent IA enregistré')
+      toast.success('Comportement de l\u2019Agent IA enregistrÃ©')
     } catch (err) {
       toast.error('Enregistrement impossible', {
         description: err instanceof Error ? err.message : undefined,
@@ -127,7 +128,7 @@ export function AdminAgentSettings() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="agent-formality">Formalité</Label>
+              <Label htmlFor="agent-formality">FormalitÃ©</Label>
               <select
                 id="agent-formality"
                 className={selectClassName}
@@ -143,7 +144,7 @@ export function AdminAgentSettings() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="agent-length">Longueur des réponses</Label>
+              <Label htmlFor="agent-length">Longueur des rÃ©ponses</Label>
               <select
                 id="agent-length"
                 className={selectClassName}
@@ -176,18 +177,18 @@ export function AdminAgentSettings() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="agent-price">Manière de présenter les prix</Label>
+            <Label htmlFor="agent-price">ManiÃ¨re de prÃ©senter les prix</Label>
             <Textarea
               id="agent-price"
               rows={2}
-              placeholder="Ex. Toujours indiquer le prix en Ariary (Ar), jamais en devise étrangère."
+              placeholder="Ex. Toujours indiquer le prix en Ariary (Ar), jamais en devise Ã©trangÃ¨re."
               value={values.pricePresentation}
               onChange={(e) => set('pricePresentation', e.target.value)}
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="agent-product">Manière de présenter les produits</Label>
+            <Label htmlFor="agent-product">ManiÃ¨re de prÃ©senter les produits</Label>
             <Textarea
               id="agent-product"
               rows={2}
@@ -198,7 +199,7 @@ export function AdminAgentSettings() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="agent-priority">Informations à privilégier</Label>
+            <Label htmlFor="agent-priority">Informations Ã  privilÃ©gier</Label>
             <Textarea
               id="agent-priority"
               rows={2}
@@ -209,18 +210,18 @@ export function AdminAgentSettings() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="agent-forbidden">Informations à ne jamais communiquer</Label>
+            <Label htmlFor="agent-forbidden">Informations Ã  ne jamais communiquer</Label>
             <Textarea
               id="agent-forbidden"
               rows={2}
-              placeholder="Ex. Ne jamais donner le numéro de téléphone personnel de l'admin."
+              placeholder="Ex. Ne jamais donner le numÃ©ro de tÃ©lÃ©phone personnel de l'admin."
               value={values.forbiddenInfo}
               onChange={(e) => set('forbiddenInfo', e.target.value)}
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="agent-custom">Instructions personnalisées additionnelles</Label>
+            <Label htmlFor="agent-custom">Instructions personnalisÃ©es additionnelles</Label>
             <Textarea
               id="agent-custom"
               rows={3}
@@ -231,6 +232,22 @@ export function AdminAgentSettings() {
           </div>
         </CardContent>
       </Card>
+
+        <div className="flex items-center gap-3 rounded-lg border p-4">
+          <input
+            id="agent-auto-reply"
+            type="checkbox"
+            checked={values.autoReplyEnabled}
+            onChange={(e) => set('autoReplyEnabled', e.target.checked)}
+            className="size-4"
+          />
+          <div className="flex flex-col gap-0.5">
+            <Label htmlFor="agent-auto-reply">Reponse automatique</Label>
+            <p className="text-xs text-muted-foreground">
+              Quand un client vous envoie un message, l'Agent IA repond automatiquement a sa place.
+            </p>
+          </div>
+        </div>
 
       <Button type="submit" disabled={saving} className="w-fit">
         {saving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}

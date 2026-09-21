@@ -332,12 +332,31 @@ export async function signUp(
       )
     }
 
-    if (!existingClient) {
-      const { error: clientInsertError } = await supabase
-        .from('clients')
-        .insert({
-          profile_id: userId,
-          status: 'en_attente',
+      if (!existingClient) {
+        const shopSlug = `${pseudo}-${Date.now().toString(36)}`
+
+        const { data: newShop, error: shopInsertError } = await supabase
+          .from('shops')
+          .insert({
+            owner_id: userId,
+            slug: shopSlug,
+            name: `Boutique de ${fullName}`,
+          })
+          .select('id')
+          .single()
+
+        if (shopInsertError) {
+          throw new Error(
+            `Erreur lors de la creation de la boutique : ${shopInsertError.message}`,
+          )
+        }
+
+        const { error: clientInsertError } = await supabase
+          .from('clients')
+          .insert({
+            profile_id: userId,
+            status: 'en_attente',
+            shop_id: newShop.id,
         })
 
       if (clientInsertError) {
@@ -666,6 +685,45 @@ export async function sendMessage(values: {
   attachmentName?: string
   attachmentUrl?: string
 }) {
+  // 1. Récupérer l'utilisateur réellement connecté
+  const {
+    data: userData,
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError) {
+    throw new Error(userError.message)
+  }
+
+  const user = userData.user
+
+  if (!user) {
+    throw new Error(
+      'Vous devez être connecté pour envoyer un message.',
+    )
+  }
+
+  // 2. Récupérer le client et surtout son shop_id
+  const {
+    data: client,
+    error: clientError,
+  } = await supabase
+    .from('clients')
+    .select('id, profile_id, shop_id')
+    .eq('id', values.clientId)
+    .single()
+
+  if (clientError) {
+    throw new Error(
+      `Impossible de récupérer le client : ${clientError.message}`,
+    )
+  }
+
+  if (!client) {
+    throw new Error('Client introuvable.')
+  }
+
+  // 3. Construire les pièces jointes
   const legacy = legacyAttachment(
     values.attachmentType ?? null,
     values.attachmentName ?? null,
@@ -679,13 +737,16 @@ export async function sendMessage(values: {
   const firstAttachment =
     attachments[0] ?? null
 
+  // 4. Insérer le message
+  // sender_id vient maintenant de auth.getUser()
+  // et non de la valeur envoyée par le composant.
   const row = throwIfError(
     await supabase
       .from('messages')
       .insert({
-        shop_id: await getCurrentShopId(),
-        client_id: values.clientId,
-        sender_id: values.senderId,
+        shop_id: client.shop_id,
+        client_id: client.id,
+        sender_id: user.id,
         body: values.body ?? null,
         attachments,
         attachment_type:
@@ -703,10 +764,9 @@ export async function sendMessage(values: {
 
   return mapMessage(
     row,
-    values.senderId,
+    user.id,
   )
 }
-
 // Retire le message uniquement de la vue de currentUserId.
 export async function deleteMessageForMe(
   messageId: string,
@@ -1932,6 +1992,7 @@ export type AgentSettings = {
   priorityInfo: string
   forbiddenInfo: string
   customInstructions: string
+  autoReplyEnabled: boolean
 }
 
 type AgentSettingsRow = {
@@ -1945,6 +2006,7 @@ type AgentSettingsRow = {
   priority_info: string | null
   forbidden_info: string | null
   custom_instructions: string | null
+  auto_reply_enabled: boolean | null
 }
 
 function mapAgentSettings(
@@ -1974,6 +2036,7 @@ function mapAgentSettings(
       row.forbidden_info ?? '',
     customInstructions:
       row.custom_instructions ?? '',
+      autoReplyEnabled: row.auto_reply_enabled ?? false,
   }
 }
 
@@ -2027,6 +2090,8 @@ export async function saveAgentSettings(
       values.forbiddenInfo,
     custom_instructions:
       values.customInstructions,
+    auto_reply_enabled:
+      values.autoReplyEnabled,
     updated_at:
       new Date().toISOString(),
   }
@@ -2484,6 +2549,33 @@ export function isClientPending(client) {
   return client.status === 'en_attente'
 }
 
+export async function getAdminProfileId() {
+  const { data } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
+    .limit(1)
+    .maybeSingle()
+
+  return data?.id ?? null
+}
+
+export async function generateAutoReply(message, clientId) {
+  const response = await fetch('/api/agent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, clientId }),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok || !data?.reply) {
+    throw new Error(data?.error ?? 'Reponse IA indisponible.')
+  }
+
+  return data.reply
+}
+
 export async function submitPaymentReference(clientId, values) {
   const { error } = await supabase
     .from('clients')
@@ -2498,3 +2590,6 @@ export async function submitPaymentReference(clientId, values) {
     throw new Error('Erreur lors de l enregistrement du paiement : ' + error.message)
   }
 }
+
+
+

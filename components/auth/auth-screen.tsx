@@ -108,8 +108,7 @@ export function AuthScreen() {
               onEnterAdmin={() => router.push('/admin')}
               onRegisterComplete={async () => {
                 await signOut()
-                router.push('/')
-                router.refresh()
+                  window.location.href = '/'
               }}
             />
           )}

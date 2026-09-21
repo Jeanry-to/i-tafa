@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import {
   useEffect,
@@ -33,6 +33,9 @@ import {
   unsubscribeFromMessages,
   uploadAttachment,
   mapMessage,
+  getAdminProfileId,
+  generateAutoReply,
+  getAgentSettings,
   type ChatMessage,
 } from '@/lib/services/api'
 
@@ -62,6 +65,7 @@ export function ChatView({
   const [text, setText] = useState('')
   const [uploading, setUploading] = useState(false)
   const [sending, setSending] = useState(false)
+  const [aiTyping, setAiTyping] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   const endRef = useRef<HTMLDivElement>(null)
@@ -134,55 +138,79 @@ export function ChatView({
       window.clearTimeout(timer)
     }
   }, [messages])
+async function handleSend(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault()
 
-  async function handleSend(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  const body = text.trim()
 
-    const body = text.trim()
+  if (!body || sending) return
 
-    if (!body || sending) return
+  setText('')
+  setSending(true)
 
-    setText('')
-    setSending(true)
+  try {
+    const savedMessage = await sendMessage({
+      clientId,
+      senderId: currentUserId,
+      body,
+    })
 
-    try {
-      const savedMessage = await sendMessage({
-        clientId,
-        senderId: currentUserId,
-        body,
-      })
+    const displayMessage = mapMessage(
+      {
+        id: savedMessage.id,
+        client_id: savedMessage.clientId,
+        sender_id: savedMessage.senderId,
+        body: savedMessage.text ?? null,
+        sent_at: savedMessage.sentAt,
+        attachment_type: savedMessage.attachment?.type ?? null,
+        attachment_name: savedMessage.attachment?.name ?? null,
+        attachment_url: savedMessage.attachment?.url ?? null,
+      },
+      currentUserId,
+      perspective,
+    )
 
-      const displayMessage = mapMessage(
-        {
-          id: savedMessage.id,
-          client_id: savedMessage.clientId,
-          sender_id: savedMessage.senderId,
-          body: savedMessage.text ?? null,
-          sent_at: savedMessage.sentAt,
-          attachment_type: savedMessage.attachment?.type ?? null,
-          attachment_name: savedMessage.attachment?.name ?? null,
-          attachment_url: savedMessage.attachment?.url ?? null,
-        },
-        currentUserId,
-        perspective,
-      )
+    setMessages((currentMessages) => {
+      if (currentMessages.some((message) => message.id === displayMessage.id)) {
+        return currentMessages
+      }
 
-      setMessages((currentMessages) => {
-        if (currentMessages.some((message) => message.id === displayMessage.id)) {
-          return currentMessages
+      return [...currentMessages, displayMessage]
+    })
+
+    if (perspective === 'client') {
+      void (async () => {
+        try {
+          const settings = await getAgentSettings()
+
+          if (settings?.autoReplyEnabled) {
+            setAiTyping(true)
+
+            try {
+              await generateAutoReply(body, clientId)
+            } finally {
+              setAiTyping(false)
+            }
+          }
+        } catch (autoReplyError) {
+          console.error('Erreur reponse automatique :', autoReplyError)
         }
-        return [...currentMessages, displayMessage]
-      })
-    } catch (error) {
-      setText(body)
-      console.error('Erreur envoi message :', error)
-      toast.error('Message non envoyé', {
-        description: error instanceof Error ? error.message : 'Veuillez réessayer.',
-      })
-    } finally {
-      setSending(false)
+      })()
     }
+  } catch (error) {
+    setText(body)
+    console.error('Erreur envoi message :', error)
+
+    toast.error('Message non envoyé', {
+      description:
+        error instanceof Error
+          ? error.message
+          : 'Veuillez réessayer.',
+    })
+  } finally {
+    setSending(false)
   }
+}
 
   function triggerFilePicker() {
     if (uploading || sending) return
@@ -296,7 +324,7 @@ export function ChatView({
           </div>
         ) : (
           visibleMessages.map((message) => {
-            const mine = message.from === perspective
+            const mine = message.senderId === currentUserId
             const isOpen = openMenuId === message.id
 
             return (
@@ -392,8 +420,16 @@ export function ChatView({
             )
           })
         )}
-
-        <div ref={endRef} />
+{aiTyping && perspective === 'client' && (
+  <div className="flex justify-start">
+    <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-card px-3.5 py-2 text-sm text-muted-foreground shadow-sm">
+      <Loader2 className="size-3.5 animate-spin" />
+      L’IA est en train d’écrire…
+    </div>
+  </div>
+)}
+        
+	<div ref={endRef} />
       </div>
 
       {onlyAdminPosts && perspective === 'client' ? (
@@ -516,3 +552,6 @@ function AttachButton({
     </button>
   )
 }
+
+
+
