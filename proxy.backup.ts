@@ -36,54 +36,32 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // =====================================================
-  // VERIFICATION DE LA SESSION SUPABASE
-  // =====================================================
-
+  // Verifie la session Supabase
   const {
     data: { user },
-    error: userError,
   } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
-
-  console.log(
-    '[PROXY] pathname:',
-    pathname,
-    'user:',
-    user?.id ?? 'AUCUN',
-    'authError:',
-    userError?.message ?? 'aucune'
-  )
 
   // =====================================================
   // PROTECTION DE /admin
   // =====================================================
 
   if (pathname.startsWith('/admin')) {
-    // Pas connecté
+    // Pas connecte
     if (!user) {
-      console.log('[PROXY] /admin → pas de session')
-
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
 
       return NextResponse.redirect(loginUrl)
     }
 
-    // Récupère le rôle et le statut super admin
+    // Recupere le role et le statut super admin depuis profiles
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('role, is_super_admin')
       .eq('id', user.id)
       .single()
-
-    console.log(
-      '[PROXY] /admin → profile:',
-      profile,
-      'error:',
-      error?.message ?? 'aucune'
-    )
 
     // Profil introuvable
     if (error || !profile) {
@@ -92,17 +70,10 @@ export async function proxy(request: NextRequest) {
       )
     }
 
-    const isAllowed =
-      profile.role === 'admin' ||
-      profile.is_super_admin === true
+    const isAllowed = profile.role === 'admin' || profile.is_super_admin === true
 
     // Ni admin ni super admin = interdit
     if (!isAllowed) {
-      console.log(
-        '[PROXY] /admin → accès refusé pour role:',
-        profile.role
-      )
-
       return NextResponse.redirect(
         new URL('/client', request.url)
       )
@@ -114,86 +85,46 @@ export async function proxy(request: NextRequest) {
   // =====================================================
 
   if (pathname.startsWith('/client')) {
-    // Pas connecté
+    // Pas connecte
     if (!user) {
-      console.log('[PROXY] /client → pas de session')
-
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
 
       return NextResponse.redirect(loginUrl)
     }
 
-    // Récupère le profil
-    const { data: profile, error: profileError } =
-      await supabase
-        .from('profiles')
-        .select('role, is_super_admin')
-        .eq('id', user.id)
-        .single()
-
-    console.log(
-      '[PROXY] /client → profile:',
-      profile,
-      'error:',
-      profileError?.message ?? 'aucune'
-    )
+    // Recupere le role et le statut super admin
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, is_super_admin')
+      .eq('id', user.id)
+      .single()
 
     if (!profile) {
-      console.log('[PROXY] /client → profil introuvable')
-
       return NextResponse.redirect(
         new URL('/login', request.url)
       )
     }
 
     // Admin ou super admin = espace admin
-    if (
-      profile.role === 'admin' ||
-      profile.is_super_admin === true
-    ) {
-      console.log(
-        '[PROXY] /client → utilisateur admin → /admin'
-      )
-
+    if (profile.role === 'admin' || profile.is_super_admin === true) {
       return NextResponse.redirect(
         new URL('/admin', request.url)
       )
     }
 
-    // ===================================================
-    // VERIFICATION DU CLIENT
-    // ===================================================
+    // Verifie le statut du client (actif uniquement)
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('status')
+      .eq('profile_id', user.id)
+      .maybeSingle()
 
-    const { data: clientRow, error: clientError } =
-      await supabase
-        .from('clients')
-        .select('status')
-        .eq('profile_id', user.id)
-        .maybeSingle()
-
-    console.log(
-      '[PROXY] /client → clientRow:',
-      clientRow,
-      'error:',
-      clientError?.message ?? 'aucune'
-    )
-
-    // Le compte doit être actif
     if (!clientRow || clientRow.status !== 'actif') {
-      console.log(
-        '[PROXY] /client → accès refusé, clientRow:',
-        clientRow
-      )
-
       return NextResponse.redirect(
         new URL('/', request.url)
       )
     }
-
-    console.log(
-      '[PROXY] /client → accès autorisé'
-    )
   }
 
   return response
@@ -205,3 +136,6 @@ export const config = {
     '/client/:path*',
   ],
 }
+
+
+
