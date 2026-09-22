@@ -56,6 +56,7 @@ export type ChatMessage = {
   attachments: Attachment[]
   time: string
   sentAt: string
+  readAt: string | null
   deletedForEveryone: boolean
   deletedForMe: boolean
 }
@@ -103,6 +104,7 @@ export type RealtimeMessage = {
   sender_id: string
   body: string | null
   sent_at: string
+  read_at?: string | null
   attachment_type: AttachmentType | null
   attachment_name: string | null
   attachment_url: string | null
@@ -237,6 +239,7 @@ export function mapMessage(
     id: row.id,
     clientId: row.client_id,
     senderId: row.sender_id,
+    readAt: row.read_at ?? null,
     from:
       row.sender_id === currentUserId
         ? perspective
@@ -661,7 +664,7 @@ export async function getMessages(
     await supabase
       .from('messages')
       .select(
-        'id, client_id, sender_id, body, sent_at, attachment_type, attachment_name, attachment_url, attachments',
+        'id, client_id, sender_id, body, sent_at, read_at, attachment_type, attachment_name, attachment_url, attachments',
       )
       .eq('client_id', clientId)
       .order('sent_at', { ascending: true }),
@@ -757,7 +760,7 @@ export async function sendMessage(values: {
           firstAttachment?.url ?? null,
       })
       .select(
-        'id, client_id, sender_id, body, sent_at, attachment_type, attachment_name, attachment_url, attachments',
+        'id, client_id, sender_id, body, sent_at, read_at, attachment_type, attachment_name, attachment_url, attachments',
       )
       .single(),
   ) as RealtimeMessage
@@ -1844,6 +1847,9 @@ export function subscribeToMessages(
   onMessage: (
     message: RealtimeMessage,
   ) => void,
+  onUpdate?: (
+    message: RealtimeMessage,
+  ) => void,
 ) {
   return supabase
     .channel(
@@ -1860,6 +1866,20 @@ export function subscribeToMessages(
       },
       (payload) =>
         onMessage(
+          payload.new as RealtimeMessage,
+        ),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter:
+          `client_id=eq.${clientId}`,
+      },
+      (payload) =>
+        onUpdate?.(
           payload.new as RealtimeMessage,
         ),
     )
@@ -2590,6 +2610,3 @@ export async function submitPaymentReference(clientId, values) {
     throw new Error('Erreur lors de l enregistrement du paiement : ' + error.message)
   }
 }
-
-
-

@@ -49,13 +49,13 @@ const features = [
   },
   {
     icon: MessagesSquare,
-    title: 'Messagerie directe',
-    text: 'Discussion privee avec Sarobidy et annonces officielles.',
+        title: 'Messagerie directe',
+        text: "Discussion privée avec l'Admin et annonces officielles.",
   },
   {
     icon: Smartphone,
-    title: 'Paiement Mvola',
-    text: 'Payez, entrez la reference, accedez immediatement au service.',
+     title: 'Différents modes de paiement',
+    text: 'Payez, renseignez la référence et accédez immédiatement au service.',
   },
 ]
 
@@ -75,8 +75,9 @@ export function AuthScreen() {
           </h1>
 
           <p className="mt-4 max-w-md text-pretty leading-relaxed text-sidebar-foreground/70">
-            i-tafa reunit paiement Mvola, messagerie privee et annonces dans un
-            espace simple et securise, gere par {BRAND.owner}.
+           i-tafa réunit une messagerie privée et des annonces dans un
+            espace simple et sécurisé, intégrant plusieurs modes de paiement,
+            le tout géré par {BRAND.owner}.
           </p>
 
           <ul className="mt-10 flex flex-col gap-6">
@@ -245,12 +246,17 @@ function LoginForm({
 
         onEnterClient()
       }
-    } catch (error) {
+        } catch (error) {
+      const isInvalidCredentials =
+        error instanceof Error &&
+        /invalid login credentials/i.test(error.message)
+
       toast.error('Connexion impossible', {
-        description:
-          error instanceof Error
+        description: isInvalidCredentials
+          ? 'Adresse email ou mot de passe incorrect.'
+          : error instanceof Error
             ? error.message
-            : 'Identifiants incorrects.',
+            : 'Adresse email ou mot de passe incorrect.',
       })
     } finally {
       setLoading(false)
