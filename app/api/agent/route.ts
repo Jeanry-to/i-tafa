@@ -402,25 +402,25 @@ async function callGemini(
       const delay = retryDelays[attempt - 1]
 
       console.warn(
-        `[GEMINI] Tentative ${attempt}/${maxAttempts} échouée (${status ?? code ?? 'erreur temporaire'}). Nouvelle tentative dans ${delay} ms...`,
+        `[GEMINI] Tentative ${attempt}/${maxAttempts}  chou e (${status ?? code ?? 'erreur temporaire'}). Nouvelle tentative dans ${delay} ms...`,
       )
 
       await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
 
-  throw new Error('Gemini indisponible après plusieurs tentatives')
+  throw new Error('Gemini indisponible apr s plusieurs tentatives')
 }
 // DÃ©termine la limite de tokens Ã  appliquer selon la longueur de rÃ©ponse voulue
 function resolveMaxTokens(responseLength: string | null): number {
   switch (responseLength) {
     case 'courte':
-      return 120;
+      return 80;
     case 'detaillee':
-      return 500;
+      return 300;
     case 'moyenne':
     default:
-      return 250;
+      return 150;
   }
 }
 
