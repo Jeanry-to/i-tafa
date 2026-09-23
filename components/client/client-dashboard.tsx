@@ -77,6 +77,7 @@ export function ClientDashboard() {
 
         setProfile(currentProfile)
         setClient(clientRow)
+	console.log('[IA DEBUG] clientRow:', clientRow)
         setAnnouncements(announcementRows)
 
         if (clientRow) {

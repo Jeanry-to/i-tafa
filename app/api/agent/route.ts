@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { GoogleGenAI } from '@google/genai';
 
 // ---------------------------------------------------------------------------
 // Configuration des clients (cÃ´tÃ© serveur uniquement â€” jamais exposÃ© au navigateur)
@@ -14,6 +15,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'openai/gpt-oss-20b';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -339,6 +341,76 @@ async function callGroq(
   return reply as string;
 }
 
+async function callGemini(
+  systemPrompt: string,
+  history: ChatMessage[],
+  maxTokens: number,
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY
+
+  if (!apiKey) {
+    throw new Error(
+      "GEMINI_API_KEY manquant dans les variables d'environnement",
+    )
+  }
+
+  const ai = new GoogleGenAI({ apiKey })
+
+  const contents = history.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }))
+
+  const maxAttempts = 3
+  const retryDelays = [1500, 3000]
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.4,
+          maxOutputTokens: maxTokens,
+        },
+      })
+
+      const reply = response.text
+
+      if (!reply) {
+        throw new Error('Reponse Gemini vide ou mal formee')
+      }
+
+      return reply
+    } catch (error: any) {
+      const status = error?.status
+      const code = error?.code
+      const message = String(error?.message ?? error)
+
+      const isTemporaryError =
+        status === 'UNAVAILABLE' ||
+        code === 503 ||
+        message.includes('"code":503') ||
+        message.includes('high demand') ||
+        message.includes('temporarily unavailable')
+
+      if (!isTemporaryError || attempt === maxAttempts) {
+        throw error
+      }
+
+      const delay = retryDelays[attempt - 1]
+
+      console.warn(
+        `[GEMINI] Tentative ${attempt}/${maxAttempts} échouée (${status ?? code ?? 'erreur temporaire'}). Nouvelle tentative dans ${delay} ms...`,
+      )
+
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  throw new Error('Gemini indisponible après plusieurs tentatives')
+}
 // DÃ©termine la limite de tokens Ã  appliquer selon la longueur de rÃ©ponse voulue
 function resolveMaxTokens(responseLength: string | null): number {
   switch (responseLength) {
@@ -420,7 +492,7 @@ export async function POST(request: Request) {
 
     // 4. Appeler Groq avec une limite de tokens adaptÃ©e Ã  la longueur voulue
     const maxTokens = resolveMaxTokens(settings?.response_length ?? null);
-    const reply = await callGroq(systemPrompt, conversation, maxTokens);
+    const reply = await callGemini(systemPrompt, conversation, maxTokens);
 
 
       // 5. Enregistrer la reponse comme message admin (client et boutique deja identifies)

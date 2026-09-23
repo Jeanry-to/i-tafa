@@ -379,6 +379,180 @@ export async function signOut() {
   if (error) throw new Error(error.message)
 }
 
+export async function signInWithGoogle(
+  next: string = '/client',
+  mode: 'login' | 'register' = 'login',
+) {
+  const callbackUrl = new URL(
+    `${window.location.origin}/auth/callback`,
+  )
+
+  callbackUrl.searchParams.set('next', next)
+
+  if (mode === 'register') {
+    callbackUrl.searchParams.set('mode', 'register')
+  }
+
+  const { error } =
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: callbackUrl.toString(),
+      },
+    })
+
+  if (error) throw new Error(error.message)
+}/**
+ * Vérifie si un pseudo est disponible.
+ *
+ * La vérification est faite directement dans Supabase.
+ * L'index unique protège également contre deux inscriptions
+ * simultanées avec le même pseudo.
+ */
+export async function isPseudoAvailable(
+  pseudo: string,
+): Promise<boolean> {
+  const normalizedPseudo = pseudo.trim()
+
+  if (!normalizedPseudo) {
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .ilike('pseudo', normalizedPseudo)
+    .limit(1)
+
+  if (error) {
+    throw new Error(
+      `Erreur lors de la vérification du pseudo : ${error.message}`,
+    )
+  }
+
+  return data.length === 0
+}
+
+/**
+ * Prépare le compte client après une inscription Google.
+ *
+ * Le compte reste en_attente jusqu'à la validation du paiement
+ * par l'administrateur.
+ */
+export async function prepareGoogleRegistration(
+  pseudo: string,
+) {
+  const normalizedPseudo = pseudo.trim()
+
+  if (!normalizedPseudo) {
+    throw new Error('Le pseudo est obligatoire.')
+  }
+
+  const available = await isPseudoAvailable(
+    normalizedPseudo,
+  )
+
+  if (!available) {
+    throw new Error('Pseudo déjà utilisé.')
+  }
+
+  const {
+    data: userData,
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError) {
+    throw new Error(userError.message)
+  }
+
+  const user = userData.user
+
+  if (!user) {
+    throw new Error(
+      'Session Google introuvable. Veuillez recommencer.',
+    )
+  }
+
+  const googleName =
+    (user.user_metadata?.full_name as string | undefined) ??
+    (user.user_metadata?.name as string | undefined) ??
+    user.email?.split('@')[0] ??
+    'Client'
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      pseudo: normalizedPseudo,
+      full_name: googleName,
+    })
+    .eq('id', user.id)
+
+  if (profileError) {
+    if (profileError.code === '23505') {
+      throw new Error('Pseudo déjà utilisé.')
+    }
+
+    throw new Error(
+      `Erreur lors de la création du profil : ${profileError.message}`,
+    )
+  }
+
+  const { data: existingClient, error: clientCheckError } =
+    await supabase
+      .from('clients')
+      .select('id')
+      .eq('profile_id', user.id)
+      .maybeSingle()
+
+  if (clientCheckError) {
+    throw new Error(
+      `Erreur lors de la vérification du client : ${clientCheckError.message}`,
+    )
+  }
+
+  if (existingClient) {
+    return existingClient
+  }
+
+  const shopSlug = `${normalizedPseudo}-${Date.now().toString(36)}`
+
+  const { data: newShop, error: shopError } =
+    await supabase
+      .from('shops')
+      .insert({
+        owner_id: user.id,
+        slug: shopSlug,
+        name: `Boutique de ${googleName}`,
+      })
+      .select('id')
+      .single()
+
+  if (shopError) {
+    throw new Error(
+      `Erreur lors de la création de la boutique : ${shopError.message}`,
+    )
+  }
+
+  const { data: client, error: clientError } =
+    await supabase
+      .from('clients')
+      .insert({
+        profile_id: user.id,
+        status: 'en_attente',
+        shop_id: newShop.id,
+      })
+      .select('id, profile_id, status')
+      .single()
+
+  if (clientError) {
+    throw new Error(
+      `Erreur lors de la création du client : ${clientError.message}`,
+    )
+  }
+
+  return client
+}
+
 export async function sendPasswordReset(email: string) {
   return throwIfError(
     await supabase.auth.resetPasswordForEmail(email, {
@@ -2565,8 +2739,8 @@ export async function rejectRenewalRequest(
 
 
 
-export function isClientPending(client) {
-  return client.status === 'en_attente'
+export function isClientPending(client: { status?: string } | null | undefined) {
+  return client?.status === 'en_attente'
 }
 
 export async function getAdminProfileId() {
@@ -2580,7 +2754,10 @@ export async function getAdminProfileId() {
   return data?.id ?? null
 }
 
-export async function generateAutoReply(message, clientId) {
+export async function generateAutoReply(
+  message: string,
+  clientId: string,
+) {
   const response = await fetch('/api/agent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2596,7 +2773,14 @@ export async function generateAutoReply(message, clientId) {
   return data.reply
 }
 
-export async function submitPaymentReference(clientId, values) {
+export async function submitPaymentReference(
+  clientId: string,
+  values: {
+    method: string
+    reference: string
+    amount?: number | null
+  },
+) {
   const { error } = await supabase
     .from('clients')
     .update({
@@ -2610,3 +2794,5 @@ export async function submitPaymentReference(clientId, values) {
     throw new Error('Erreur lors de l enregistrement du paiement : ' + error.message)
   }
 }
+
+

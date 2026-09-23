@@ -56,6 +56,7 @@ export type ChatMessage = {
   attachments: Attachment[]
   time: string
   sentAt: string
+  readAt: string | null
   deletedForEveryone: boolean
   deletedForMe: boolean
 }
@@ -103,6 +104,7 @@ export type RealtimeMessage = {
   sender_id: string
   body: string | null
   sent_at: string
+  read_at?: string | null
   attachment_type: AttachmentType | null
   attachment_name: string | null
   attachment_url: string | null
@@ -237,6 +239,7 @@ export function mapMessage(
     id: row.id,
     clientId: row.client_id,
     senderId: row.sender_id,
+    readAt: row.read_at ?? null,
     from:
       row.sender_id === currentUserId
         ? perspective
@@ -374,6 +377,167 @@ export async function signOut() {
   const { error } = await supabase.auth.signOut()
 
   if (error) throw new Error(error.message)
+}
+
+export async function signInWithGoogle(next: string = '/client') {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback?next=${next}`,
+    },
+  })
+
+  if (error) throw new Error(error.message)
+}
+/**
+ * Vérifie si un pseudo est disponible.
+ *
+ * La vérification est faite directement dans Supabase.
+ * L'index unique protège également contre deux inscriptions
+ * simultanées avec le même pseudo.
+ */
+export async function isPseudoAvailable(
+  pseudo: string,
+): Promise<boolean> {
+  const normalizedPseudo = pseudo.trim()
+
+  if (!normalizedPseudo) {
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .ilike('pseudo', normalizedPseudo)
+    .limit(1)
+
+  if (error) {
+    throw new Error(
+      `Erreur lors de la vérification du pseudo : ${error.message}`,
+    )
+  }
+
+  return data.length === 0
+}
+
+/**
+ * Prépare le compte client après une inscription Google.
+ *
+ * Le compte reste en_attente jusqu'à la validation du paiement
+ * par l'administrateur.
+ */
+export async function prepareGoogleRegistration(
+  pseudo: string,
+) {
+  const normalizedPseudo = pseudo.trim()
+
+  if (!normalizedPseudo) {
+    throw new Error('Le pseudo est obligatoire.')
+  }
+
+  const available = await isPseudoAvailable(
+    normalizedPseudo,
+  )
+
+  if (!available) {
+    throw new Error('Pseudo déjà utilisé.')
+  }
+
+  const {
+    data: userData,
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError) {
+    throw new Error(userError.message)
+  }
+
+  const user = userData.user
+
+  if (!user) {
+    throw new Error(
+      'Session Google introuvable. Veuillez recommencer.',
+    )
+  }
+
+  const googleName =
+    (user.user_metadata?.full_name as string | undefined) ??
+    (user.user_metadata?.name as string | undefined) ??
+    user.email?.split('@')[0] ??
+    'Client'
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      pseudo: normalizedPseudo,
+      full_name: googleName,
+    })
+    .eq('id', user.id)
+
+  if (profileError) {
+    if (profileError.code === '23505') {
+      throw new Error('Pseudo déjà utilisé.')
+    }
+
+    throw new Error(
+      `Erreur lors de la création du profil : ${profileError.message}`,
+    )
+  }
+
+  const { data: existingClient, error: clientCheckError } =
+    await supabase
+      .from('clients')
+      .select('id')
+      .eq('profile_id', user.id)
+      .maybeSingle()
+
+  if (clientCheckError) {
+    throw new Error(
+      `Erreur lors de la vérification du client : ${clientCheckError.message}`,
+    )
+  }
+
+  if (existingClient) {
+    return existingClient
+  }
+
+  const shopSlug = `${normalizedPseudo}-${Date.now().toString(36)}`
+
+  const { data: newShop, error: shopError } =
+    await supabase
+      .from('shops')
+      .insert({
+        owner_id: user.id,
+        slug: shopSlug,
+        name: `Boutique de ${googleName}`,
+      })
+      .select('id')
+      .single()
+
+  if (shopError) {
+    throw new Error(
+      `Erreur lors de la création de la boutique : ${shopError.message}`,
+    )
+  }
+
+  const { data: client, error: clientError } =
+    await supabase
+      .from('clients')
+      .insert({
+        profile_id: user.id,
+        status: 'en_attente',
+        shop_id: newShop.id,
+      })
+      .select('id, profile_id, status')
+      .single()
+
+  if (clientError) {
+    throw new Error(
+      `Erreur lors de la création du client : ${clientError.message}`,
+    )
+  }
+
+  return client
 }
 
 export async function sendPasswordReset(email: string) {
@@ -661,7 +825,7 @@ export async function getMessages(
     await supabase
       .from('messages')
       .select(
-        'id, client_id, sender_id, body, sent_at, attachment_type, attachment_name, attachment_url, attachments',
+        'id, client_id, sender_id, body, sent_at, read_at, attachment_type, attachment_name, attachment_url, attachments',
       )
       .eq('client_id', clientId)
       .order('sent_at', { ascending: true }),
@@ -685,6 +849,45 @@ export async function sendMessage(values: {
   attachmentName?: string
   attachmentUrl?: string
 }) {
+  // 1. Récupérer l'utilisateur réellement connecté
+  const {
+    data: userData,
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError) {
+    throw new Error(userError.message)
+  }
+
+  const user = userData.user
+
+  if (!user) {
+    throw new Error(
+      'Vous devez être connecté pour envoyer un message.',
+    )
+  }
+
+  // 2. Récupérer le client et surtout son shop_id
+  const {
+    data: client,
+    error: clientError,
+  } = await supabase
+    .from('clients')
+    .select('id, profile_id, shop_id')
+    .eq('id', values.clientId)
+    .single()
+
+  if (clientError) {
+    throw new Error(
+      `Impossible de récupérer le client : ${clientError.message}`,
+    )
+  }
+
+  if (!client) {
+    throw new Error('Client introuvable.')
+  }
+
+  // 3. Construire les pièces jointes
   const legacy = legacyAttachment(
     values.attachmentType ?? null,
     values.attachmentName ?? null,
@@ -698,13 +901,16 @@ export async function sendMessage(values: {
   const firstAttachment =
     attachments[0] ?? null
 
+  // 4. Insérer le message
+  // sender_id vient maintenant de auth.getUser()
+  // et non de la valeur envoyée par le composant.
   const row = throwIfError(
     await supabase
       .from('messages')
       .insert({
-        shop_id: await getCurrentShopId(),
-        client_id: values.clientId,
-        sender_id: values.senderId,
+        shop_id: client.shop_id,
+        client_id: client.id,
+        sender_id: user.id,
         body: values.body ?? null,
         attachments,
         attachment_type:
@@ -715,17 +921,16 @@ export async function sendMessage(values: {
           firstAttachment?.url ?? null,
       })
       .select(
-        'id, client_id, sender_id, body, sent_at, attachment_type, attachment_name, attachment_url, attachments',
+        'id, client_id, sender_id, body, sent_at, read_at, attachment_type, attachment_name, attachment_url, attachments',
       )
       .single(),
   ) as RealtimeMessage
 
   return mapMessage(
     row,
-    values.senderId,
+    user.id,
   )
 }
-
 // Retire le message uniquement de la vue de currentUserId.
 export async function deleteMessageForMe(
   messageId: string,
@@ -1803,6 +2008,9 @@ export function subscribeToMessages(
   onMessage: (
     message: RealtimeMessage,
   ) => void,
+  onUpdate?: (
+    message: RealtimeMessage,
+  ) => void,
 ) {
   return supabase
     .channel(
@@ -1819,6 +2027,20 @@ export function subscribeToMessages(
       },
       (payload) =>
         onMessage(
+          payload.new as RealtimeMessage,
+        ),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter:
+          `client_id=eq.${clientId}`,
+      },
+      (payload) =>
+        onUpdate?.(
           payload.new as RealtimeMessage,
         ),
     )
@@ -2519,11 +2741,11 @@ export async function getAdminProfileId() {
   return data?.id ?? null
 }
 
-export async function generateAutoReply(message) {
+export async function generateAutoReply(message, clientId) {
   const response = await fetch('/api/agent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, clientId }),
   })
 
   const data = await response.json()
@@ -2549,4 +2771,3 @@ export async function submitPaymentReference(clientId, values) {
     throw new Error('Erreur lors de l enregistrement du paiement : ' + error.message)
   }
 }
-
