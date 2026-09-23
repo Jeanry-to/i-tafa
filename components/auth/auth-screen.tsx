@@ -138,6 +138,7 @@ export function AuthScreen() {
                 await signOut()
                 window.location.href = '/'
               }}
+              googleRegister={googleRegister}
             />
           )}
         </div>
@@ -174,11 +175,13 @@ function AuthTabs({
   onEnterClient,
   onEnterAdmin,
   onRegisterComplete,
+  googleRegister,
 }: {
   onForgot: () => void
   onEnterClient: () => void
   onEnterAdmin: () => void
   onRegisterComplete: () => void
+  googleRegister: boolean
 }) {
   return (
     <>
@@ -190,7 +193,7 @@ function AuthTabs({
         </p>
       </div>
 
-      <Tabs defaultValue="login">
+      <Tabs defaultValue={googleRegister ? 'register' : 'login'}>
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="login">Connexion</TabsTrigger>
           <TabsTrigger value="register">Inscription</TabsTrigger>
@@ -205,7 +208,10 @@ function AuthTabs({
         </TabsContent>
 
         <TabsContent value="register" className="mt-6">
-          <RegisterFlow onSuccess={onRegisterComplete} />
+          <RegisterFlow
+            onSuccess={onRegisterComplete}
+            googleRegister={googleRegister}
+          />
         </TabsContent>
       </Tabs>
     </>
@@ -392,14 +398,20 @@ function LoginForm({
 
 function RegisterFlow({
   onSuccess,
+  googleRegister,
 }: {
   onSuccess: () => void
+  googleRegister: boolean
 }) {
-  const [step, setStep] = useState<'info' | 'pay' | 'done'>('info')
+  const [step, setStep] = useState<'info' | 'google-pseudo' | 'pay' | 'done'>(googleRegister ? 'google-pseudo' : 'info')
 
   return (
     <div>
       <StepIndicator step={step} />
+
+      {step === 'google-pseudo' && (
+        <GooglePseudoStep onNext={() => setStep('pay')} />
+      )}
 
       {step === 'info' && (
         <RegisterInfo onNext={() => setStep('pay')} />
@@ -419,10 +431,11 @@ function RegisterFlow({
 function StepIndicator({
   step,
 }: {
-  step: 'info' | 'pay' | 'done'
+  step: 'info' | 'google-pseudo' | 'pay' | 'done'
 }) {
   const order = ['info', 'pay', 'done']
-  const idx = order.indexOf(step)
+  const normalizedStep = step === 'google-pseudo' ? 'info' : step
+  const idx = order.indexOf(normalizedStep)
   const labels = ['Compte', 'Paiement', 'Acces']
 
   return (
@@ -471,6 +484,60 @@ function StepIndicator({
         </div>
       ))}
     </div>
+  )
+}
+
+function GooglePseudoStep({
+  onNext,
+}: {
+  onNext: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [pseudo, setPseudo] = useState('')
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      await prepareGoogleRegistration(pseudo)
+
+      toast.success('Pseudo enregistre', {
+        description: 'Passons maintenant au paiement.',
+      })
+
+      onNext()
+    } catch (error) {
+      toast.error("Impossible d'enregistrer le pseudo", {
+        description:
+          error instanceof Error ? error.message : 'Reessayez.',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="google-pseudo">Choisissez votre pseudo</Label>
+
+        <Input
+          id="google-pseudo"
+          value={pseudo}
+          onChange={(e) => setPseudo(e.target.value)}
+          placeholder="miora_r"
+          required
+        />
+      </div>
+
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading && (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        )}
+        Continuer vers le paiement
+      </Button>
+    </form>
   )
 }
 
