@@ -29,6 +29,8 @@ import {
   signIn,
   signUp,
   signOut,
+  signInWithGoogle,
+  prepareGoogleRegistration,
   getCurrentProfile,
   getClientForProfile,
   isClientSuspended,
@@ -62,9 +64,24 @@ const features = [
 export function AuthScreen() {
   const router = useRouter()
   const [mode, setMode] = useState<Mode>('auth')
+  const [googleRegister, setGoogleRegister] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const params = new URLSearchParams(
+      window.location.search,
+    )
+
+    setGoogleRegister(
+      params.get('google') === 'register',
+    )
+  }, [])
 
   return (
     <main className="flex min-h-screen flex-col lg:flex-row">
+      <PendingStatusNotice />
+
       {/* Brand panel */}
       <section className="relative flex flex-col justify-between gap-10 bg-sidebar px-6 py-8 text-sidebar-foreground lg:w-[44%] lg:px-12 lg:py-12">
         <BrandLogo variant="light" />
@@ -127,6 +144,29 @@ export function AuthScreen() {
       </section>
     </main>
   )
+}
+
+function PendingStatusNotice() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const params = new URLSearchParams(window.location.search)
+
+    if (params.get('pending') === '1') {
+      toast.error('Compte en attente de validation', {
+        description:
+          'Votre inscription via Google est enregistrée. Un administrateur doit valider votre compte avant que vous puissiez y accéder.',
+      })
+    }
+
+    if (params.get('suspended') === '1') {
+      toast.error('Compte suspendu', {
+        description: 'Votre accès est actuellement suspendu.',
+      })
+    }
+  }, [])
+
+  return null
 }
 
 function AuthTabs({
@@ -267,7 +307,16 @@ function LoginForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <GoogleButton
         label="Continuer avec Google"
-        onClick={onEnterClient}
+        onClick={async () => {
+          try {
+            await signInWithGoogle('/client', 'register')
+          } catch (error) {
+            toast.error('Connexion Google impossible', {
+              description:
+                error instanceof Error ? error.message : 'Veuillez réessayer.',
+            })
+          }
+        }}
       />
 
       <Divider />
@@ -488,7 +537,16 @@ function RegisterInfo({
     >
       <GoogleButton
         label="S'inscrire avec Google"
-        onClick={onNext}
+        onClick={async () => {
+          try {
+            await signInWithGoogle('/client')
+          } catch (error) {
+            toast.error('Inscription Google impossible', {
+              description:
+                error instanceof Error ? error.message : 'Veuillez réessayer.',
+            })
+          }
+        }}
       />
 
       <Divider />
