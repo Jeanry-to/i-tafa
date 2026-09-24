@@ -520,7 +520,7 @@ export async function POST(request: Request) {
 
     // 4. Appeler Groq avec une limite de tokens adaptée à la longueur voulue
     const maxTokens = resolveMaxTokens(settings?.response_length ?? null);
-    const reply = await callGemini(systemPrompt, conversation, maxTokens);
+    const reply = await callGroq(systemPrompt, conversation, maxTokens);
 
 
       // 5. Enregistrer la reponse comme message admin (client et boutique deja identifies)
