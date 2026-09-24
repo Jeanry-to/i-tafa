@@ -75,7 +75,38 @@ interface AgentSettings {
   forbidden_info: string | null;
   custom_instructions: string | null;
 }
+interface KnowledgeCacheEntry {
+  knowledgeContext: string;
+  settings: AgentSettings | null;
+  expiresAt: number;
+}
 
+const knowledgeCache = new Map<string, KnowledgeCacheEntry>();
+const KNOWLEDGE_CACHE_TTL = 60_000;
+
+async function getCachedKnowledge(
+  shopId: string
+): Promise<{ knowledgeContext: string; settings: AgentSettings | null }> {
+  const cached = knowledgeCache.get(shopId);
+  const now = Date.now();
+
+  if (cached && cached.expiresAt > now) {
+    return { knowledgeContext: cached.knowledgeContext, settings: cached.settings };
+  }
+
+  const [knowledgeContext, settings] = await Promise.all([
+    fetchKnowledgeContext(shopId),
+    fetchAgentSettings(shopId),
+  ]);
+
+  knowledgeCache.set(shopId, {
+    knowledgeContext,
+    settings,
+    expiresAt: now + KNOWLEDGE_CACHE_TTL,
+  });
+
+  return { knowledgeContext, settings };
+}
 // ---------------------------------------------------------------------------
 // 1. Récupération de la base de connaissances depuis Supabase
 // ---------------------------------------------------------------------------
@@ -476,10 +507,7 @@ export async function POST(request: Request) {
     const shopId = clientRow.shop_id as string;
 
     // 1. Charger la base de connaissances et les réglages de comportement en parallèle
-    const [knowledgeContext, settings] = await Promise.all([
-      fetchKnowledgeContext(shopId),
-      fetchAgentSettings(shopId),
-    ]);
+    const { knowledgeContext, settings } = await getCachedKnowledge(shopId);
 
     // 2. Construire le prompt système avec les règles + les données + le comportement voulu
     const systemPrompt = buildSystemPrompt(knowledgeContext, settings);
