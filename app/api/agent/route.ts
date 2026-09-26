@@ -341,35 +341,49 @@ async function callGroq(
     throw new Error('GROQ_API_KEY manquant dans les variables d\'environnement');
   }
 
-  const response = await fetch(GROQ_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [{ role: 'system', content: systemPrompt }, ...history],
-      temperature: 0.4,
-      max_tokens: maxTokens,
-      reasoning_effort: 'low',
-      reasoning_format: 'hidden',
-    }),
-  });
+  const maxAttempts = 3;
+  const retryDelays = [2000, 4000];
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Erreur Groq (${response.status}) : ${errText}`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const response = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [{ role: 'system', content: systemPrompt }, ...history],
+        temperature: 0.4,
+        max_tokens: maxTokens,
+        reasoning_effort: 'low',
+        reasoning_format: 'hidden',
+      }),
+    });
+
+    if (response.status === 429 && attempt < maxAttempts) {
+      const delay = retryDelays[attempt - 1];
+      console.warn(`[GROQ] Rate limit atteint, nouvelle tentative dans ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      continue;
+    }
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Erreur Groq (${response.status}) : ${errText}`);
+    }
+
+    const data = await response.json();
+    const reply = data?.choices?.[0]?.message?.content;
+
+    if (!reply) {
+      throw new Error('Reponse Groq vide ou mal formee');
+    }
+
+    return reply as string;
   }
 
-  const data = await response.json();
-  const reply = data?.choices?.[0]?.message?.content;
-
-  if (!reply) {
-    throw new Error('Réponse Groq vide ou mal formée');
-  }
-
-  return reply as string;
+  throw new Error('Groq indisponible apres plusieurs tentatives (limite de debit)');
 }
 
 async function callGemini(
