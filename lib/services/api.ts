@@ -1559,12 +1559,15 @@ function mapBusinessInfo(
 export async function getBusinessInfo(): Promise<
   BusinessInfo | null
 > {
+  const shopId = await getCurrentShopId()
+
   const {
     data,
     error,
   } = await supabase
     .from('business_info')
     .select('*')
+    .eq('shop_id', shopId)
     .limit(1)
     .maybeSingle()
 
@@ -1606,12 +1609,15 @@ export async function saveBusinessInfo(
       new Date().toISOString(),
   }
 
+  const shopId = await getCurrentShopId()
+
   if (existing) {
     return throwIfError(
       await supabase
         .from('business_info')
         .update(payload)
         .eq('id', existing.id)
+        .eq('shop_id', shopId)
         .select()
         .single(),
     )
@@ -1621,8 +1627,7 @@ export async function saveBusinessInfo(
     await supabase
       .from('business_info')
       .insert({
-        shop_id:
-          await getCurrentShopId(),
+        shop_id: shopId,
         ...payload,
       })
       .select()
