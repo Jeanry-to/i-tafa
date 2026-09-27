@@ -562,12 +562,20 @@ export async function sendPasswordReset(email: string) {
 }
 
 export async function getCurrentProfile() {
-  const { data, error } =
-    await supabase.auth.getUser()
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (
+      error.message.toLowerCase().includes('auth session missing')
+    ) {
+      return null
+    }
 
-  const user = data.user
+    throw new Error(error.message)
+  }
 
   if (!user) return null
 
