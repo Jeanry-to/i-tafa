@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import {
@@ -6,8 +6,10 @@ import {
   Loader2,
   Megaphone,
   MessageCircle,
+  Package,
   UserRound,
 } from 'lucide-react'
+import { AdminProducts } from '@/components/admin/admin-products'
 import { AnnouncementsFeed } from '@/components/announcements-feed'
 import { ChatView } from '@/components/chat/chat-view'
 import { ProfileForm } from '@/components/client/profile-form'
@@ -31,6 +33,7 @@ import {
 const baseNav: Omit<NavItem, 'badge'>[] = [
   { id: 'overview', label: 'Tableau de bord', icon: LayoutDashboard },
   { id: 'annonces', label: 'Annonces', icon: Megaphone },
+  { id: 'produits', label: 'Produits & Services', icon: Package },
   { id: 'messages', label: 'Messages', icon: MessageCircle },
   { id: 'profil', label: 'Mon profil', icon: UserRound },
 ]
@@ -201,6 +204,7 @@ export function ClientDashboard() {
       subtitle: 'Voici votre espace i-tafa.',
     },
     annonces: { title: 'Annonces', subtitle: `Publications officielles de Admin.` },
+    produits: { title: 'Produits & Services', subtitle: 'Gerez les produits et services proposes par votre boutique.' },
     messages: { title: 'Messages', subtitle: `Discussion privee avec Admin.` },
     profil: { title: 'Mon profil', subtitle: 'Gerez vos informations et votre securite.' },
   }
@@ -225,6 +229,7 @@ export function ClientDashboard() {
           <Overview announcements={announcements} onOpenMessages={() => setActive('messages')} />
         )}
         {active === 'annonces' && <AnnouncementsFeed />}
+        {active === 'produits' && <AdminProducts />}
         {active === 'messages' && (
           <div className="h-[calc(100vh-13rem)]">
             <ChatView
