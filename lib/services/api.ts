@@ -1,4 +1,4 @@
-﻿import * as tus from 'tus-js-client'
+import * as tus from 'tus-js-client'
 import { supabase } from '@/lib/supabase'
 
 export type ClientStatus = 'actif' | 'suspendu' | 'en_attente'
@@ -591,6 +591,29 @@ export async function getCurrentProfile() {
 /**
  * Récupère la boutique de l'utilisateur actuellement connecté.
  */
+export async function ownsShop(): Promise<boolean> {
+  const {
+    data: userData,
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !userData.user) {
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('shops')
+    .select('id')
+    .eq('owner_id', userData.user.id)
+    .limit(1)
+
+  if (error) {
+    return false
+  }
+
+  return (data?.length ?? 0) > 0
+}
+
 export async function getCurrentShopId(): Promise<string> {
   const {
     data: userData,
@@ -2771,16 +2794,23 @@ export async function generateAutoReply(
   message: string,
   clientId: string,
 ) {
+  const formData = new FormData()
+
+  formData.append('message', message)
+  formData.append('clientId', clientId)
+  formData.append('history', '[]')
+
   const response = await fetch('/api/agent', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, clientId }),
+    body: formData,
   })
 
   const data = await response.json()
 
   if (!response.ok || !data?.reply) {
-    throw new Error(data?.error ?? 'Reponse IA indisponible.')
+    throw new Error(
+      data?.error ?? 'Reponse IA indisponible.',
+    )
   }
 
   return data.reply

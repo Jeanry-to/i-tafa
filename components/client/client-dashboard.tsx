@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import {
@@ -24,6 +24,7 @@ import {
   getClientForProfile,
   getCurrentProfile,
   getUnreadCountForClient,
+  ownsShop,
   isClientSuspended,
   signOut,
   type Announcement,
@@ -52,6 +53,7 @@ export function ClientDashboard() {
   const [loading, setLoading] = useState(true)
   const [suspendedClient, setSuspendedClient] = useState<Client | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [hasShop, setHasShop] = useState(false)
 
   useEffect(() => {
     applyTheme(getStoredTheme())
@@ -81,6 +83,9 @@ export function ClientDashboard() {
         setProfile(currentProfile)
         setClient(clientRow)
 	console.log('[IA DEBUG] clientRow:', clientRow)
+        ownsShop()
+          .then(setHasShop)
+          .catch(() => setHasShop(false))
         setAnnouncements(announcementRows)
 
         if (clientRow) {
@@ -156,7 +161,7 @@ export function ClientDashboard() {
     }
   }, [client, profile, active])
 
-  const nav: NavItem[] = baseNav.map((item) =>
+  const nav: NavItem[] = baseNav.filter((item) => item.id !== 'produits' || hasShop).map((item) =>
     item.id === 'messages' && unreadCount > 0 ? { ...item, badge: unreadCount } : item,
   )
 
@@ -229,7 +234,7 @@ export function ClientDashboard() {
           <Overview announcements={announcements} onOpenMessages={() => setActive('messages')} />
         )}
         {active === 'annonces' && <AnnouncementsFeed />}
-        {active === 'produits' && <AdminProducts />}
+        {active === 'produits' && hasShop && <AdminProducts />}
         {active === 'messages' && (
           <div className="h-[calc(100vh-13rem)]">
             <ChatView
