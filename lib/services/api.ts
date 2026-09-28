@@ -1724,10 +1724,12 @@ function mapProduct(
 }
 
 export async function getProducts() {
+  const shopId = await getCurrentShopId()
   const data = throwIfError(
     await supabase
       .from('products')
       .select('*')
+      .eq('shop_id', shopId)
       .order('sort_order', {
         ascending: true,
       }),
