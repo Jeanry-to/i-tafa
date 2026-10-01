@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -281,6 +281,15 @@ function LoginForm({
                 : 'Sans date de fin.',
             ].join(' — '),
           })
+          // ALERTE_SUSPENSION
+          window.alert(
+            'Compte suspendu\n\n' +
+              (client.suspensionReason
+                ? 'Motif : ' + client.suspensionReason
+                : 'Votre acces est suspendu.') +
+              '\n' +
+              (until ? 'Fin prevue : ' + until : 'Sans date de fin.'),
+          )
 
           return
         }
