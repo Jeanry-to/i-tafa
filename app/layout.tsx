@@ -3,6 +3,7 @@ import './globals.css'
 import ChatWidget from '../components/chat/ChatWidget'
 import { ThemeInitializer } from '@/components/theme-initializer'
 import { LanguageProvider } from '@/lib/i18n/language-context'
+import { Toaster } from 'sonner'
 
 export const metadata: Metadata = {
   title: 'Gestion des Clients',
@@ -25,6 +26,7 @@ export default function RootLayout({
           <ThemeInitializer />
           {children}
           <ChatWidget />
+          <Toaster position="top-center" richColors />
         </LanguageProvider>
       </body>
     </html>
