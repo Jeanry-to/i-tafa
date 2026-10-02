@@ -1336,7 +1336,7 @@ export async function deleteMessagesForEveryone(
       .from('messages')
       .update({
         deleted_for_everyone: true,
-        body: 'Message supprimé',
+        body: null,
         attachments: [],
         attachment_type: null,
         attachment_name: null,
@@ -1348,6 +1348,263 @@ export async function deleteMessagesForEveryone(
 }
 
 // Retire le message uniquement de la vue de currentUserId.
+// Modifier un message
+export async function editMessage(
+  messageId: string,
+  currentUserId: string,
+  newBody: string,
+) {
+  const body = newBody.trim()
+
+  if (!body) {
+    throw new Error('Le message ne peut pas être vide.')
+  }
+
+  const { data: message, error } = await supabase
+    .from('messages')
+    .select('id, sender_id, deleted_for_everyone')
+    .eq('id', messageId)
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!message) {
+    throw new Error('Message introuvable.')
+  }
+
+  if (message.sender_id !== currentUserId) {
+    throw new Error(
+      'Vous pouvez uniquement modifier vos propres messages.',
+    )
+  }
+
+  if (message.deleted_for_everyone) {
+    throw new Error('Ce message a déjà été supprimé.')
+  }
+
+  return throwIfError(
+    await supabase
+      .from('messages')
+      .update({
+        body,
+        edited_at: new Date().toISOString(),
+      })
+      .eq('id', messageId)
+      .eq('sender_id', currentUserId)
+      .select()
+      .single(),
+  )
+}
+
+// Transférer un message
+export async function forwardMessage(
+  messageId: string,
+  clientId: string,
+  senderId: string,
+  comment?: string,
+) {
+  const { data: source, error: sourceError } =
+    await supabase
+      .from('messages')
+      .select(`
+        id,
+        body,
+        attachments,
+        attachment_type,
+        attachment_name,
+        attachment_url,
+        deleted_for_everyone
+      `)
+      .eq('id', messageId)
+      .single()
+
+  if (sourceError) {
+    throw new Error(sourceError.message)
+  }
+
+  if (!source) {
+    throw new Error('Message introuvable.')
+  }
+
+  if (source.deleted_for_everyone) {
+    throw new Error(
+      'Impossible de transférer un message supprimé.',
+    )
+  }
+
+  const attachments = normalizeAttachments(
+    source.attachments,
+    legacyAttachment(
+      source.attachment_type,
+      source.attachment_name,
+      source.attachment_url,
+    ),
+  )
+
+  const firstAttachment = attachments[0] ?? null
+
+  const { data: client, error: clientError } =
+    await supabase
+      .from('clients')
+      .select('shop_id')
+      .eq('id', clientId)
+      .single()
+
+  if (clientError) {
+    throw new Error(clientError.message)
+  }
+
+  const row = throwIfError(
+    await supabase
+      .from('messages')
+      .insert({
+        shop_id: client.shop_id,
+        client_id: clientId,
+        sender_id: senderId,
+        body: source.body,
+        attachments,
+        attachment_type:
+          firstAttachment?.type ?? null,
+        attachment_name:
+          firstAttachment?.name ?? null,
+        attachment_url:
+          firstAttachment?.url ?? null,
+        forwarded_from_id: source.id,
+        forward_comment:
+          comment?.trim() || null,
+      })
+      .select(`
+        id,
+        client_id,
+        sender_id,
+        body,
+        sent_at,
+        read_at,
+        edited_at,
+        reply_to_id,
+        forwarded_from_id,
+        forward_comment,
+        reactions,
+        attachment_type,
+        attachment_name,
+        attachment_url,
+        attachments,
+        deleted_for_everyone,
+        deleted_for
+      `)
+      .single(),
+  ) as RealtimeMessage
+
+  return mapMessage(row, senderId)
+}
+
+// Ajouter ou retirer une réaction emoji
+export async function toggleMessageReaction(
+  messageId: string,
+  currentUserId: string,
+  emoji: string,
+) {
+  const { data: message, error } = await supabase
+    .from('messages')
+    .select('reactions')
+    .eq('id', messageId)
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const reactions: Record<string, string[]> =
+    message?.reactions ?? {}
+
+  const users = [
+    ...(reactions[emoji] ?? []),
+  ]
+
+  const index = users.indexOf(currentUserId)
+
+  if (index >= 0) {
+    users.splice(index, 1)
+  } else {
+    users.push(currentUserId)
+  }
+
+  if (users.length > 0) {
+    reactions[emoji] = users
+  } else {
+    delete reactions[emoji]
+  }
+
+  return throwIfError(
+    await supabase
+      .from('messages')
+      .update({
+        reactions,
+      })
+      .eq('id', messageId)
+      .select()
+      .single(),
+  )
+}
+
+// Supprimer plusieurs messages pour moi
+export async function deleteMessagesForMe(
+  messageIds: string[],
+  currentUserId: string,
+) {
+  const ids = [
+    ...new Set(
+      messageIds.filter(Boolean),
+    ),
+  ]
+
+  if (ids.length === 0) {
+    return
+  }
+
+  await Promise.all(
+    ids.map((messageId) =>
+      deleteMessageForMe(
+        messageId,
+        currentUserId,
+      ),
+    ),
+  )
+}
+
+
+// Supprimer plusieurs messages pour tout le monde
+export async function deleteMessagesForEveryone(
+  messageIds: string[],
+) {
+  const ids = [
+    ...new Set(
+      messageIds.filter(Boolean),
+    ),
+  ]
+
+  if (ids.length === 0) {
+    return
+  }
+
+  return throwIfError(
+    await supabase
+      .from('messages')
+      .update({
+        deleted_for_everyone: true,
+        body: null,
+        attachments: [],
+        attachment_type: null,
+        attachment_name: null,
+        attachment_url: null,
+      })
+      .in('id', ids)
+      .select(),
+  )
+}
+
 export async function deleteMessageForMe(
   messageId: string,
   currentUserId: string,
@@ -1395,7 +1652,7 @@ export async function deleteMessageForEveryone(
       .from('messages')
       .update({
         deleted_for_everyone: true,
-        body: 'Message supprimé',
+        body: null,
         attachments: [],
         attachment_type: null,
         attachment_name: null,
@@ -3393,4 +3650,3 @@ export async function getActiveLiveSession(): Promise<LiveSession | null> {
     endedAt: data.ended_at,
   }
 }
-
