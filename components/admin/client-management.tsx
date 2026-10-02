@@ -8,6 +8,7 @@ import {
   MessageCircle,
   PauseCircle,
   Phone,
+  Search,
   UserRound,
   X,
 } from 'lucide-react'
@@ -57,10 +58,18 @@ function getWhatsAppNumber(phone: string) {
   }
 
   if (cleaned.startsWith('0')) {
-    return `261${cleaned.slice(1)}`
+    return '261' + cleaned.slice(1)
   }
 
   return cleaned
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
 }
 
 export function ClientManagement({
@@ -70,6 +79,8 @@ export function ClientManagement({
 }) {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
+
+  const [search, setSearch] = useState('')
 
   const [selected, setSelected] = useState<Client | null>(null)
   const [profileClient, setProfileClient] = useState<Client | null>(null)
@@ -121,6 +132,25 @@ export function ClientManagement({
     reload()
   }, [])
 
+  const normalizedSearch = normalizeSearch(search)
+
+  const filteredClients = clients
+    .filter((client) => {
+      if (!normalizedSearch) {
+        return true
+      }
+
+      const clientName = normalizeSearch(client.name || '')
+
+      return clientName.includes(normalizedSearch)
+    })
+    .sort((a, b) =>
+      normalizeSearch(a.name || '').localeCompare(
+        normalizeSearch(b.name || ''),
+        'fr',
+      ),
+    )
+
   function openProfile(client: Client) {
     setProfileClient(client)
   }
@@ -152,7 +182,8 @@ export function ClientManagement({
     }
 
     toast.info('Messagerie', {
-      description: `Ouverture de la conversation avec ${client.name}.`,
+      description:
+        'Ouverture de la conversation avec ' + client.name + '.',
     })
   }
 
@@ -165,7 +196,7 @@ export function ClientManagement({
       return
     }
 
-    window.location.href = `tel:${client.phone}`
+    window.location.href = 'tel:' + client.phone
   }
 
   function openWhatsApp(client: Client) {
@@ -188,7 +219,7 @@ export function ClientManagement({
     }
 
     window.open(
-      `https://wa.me/${number}`,
+      'https://wa.me/' + number,
       '_blank',
       'noopener,noreferrer',
     )
@@ -210,7 +241,8 @@ export function ClientManagement({
       })
 
       toast.success('Client suspendu', {
-        description: `${selected.name} a été suspendu.`,
+        description:
+          selected.name + ' a été suspendu.',
       })
 
       setSelected(null)
@@ -236,7 +268,8 @@ export function ClientManagement({
 
       toast.success('Client réactivé', {
         description:
-          `${client.name} peut de nouveau utiliser son compte.`,
+          client.name +
+          ' peut de nouveau utiliser son compte.',
       })
 
       setProfileClient(null)
@@ -279,13 +312,15 @@ export function ClientManagement({
         await validateClient(client.id)
 
         toast.success('Client validé', {
-          description: `${client.name} est maintenant actif.`,
+          description:
+            client.name + ' est maintenant actif.',
         })
       } else {
         await updateClientStatus(client.id, 'suspendu')
 
         toast.success('Inscription refusée', {
-          description: `${client.name} n'a pas été validé.`,
+          description:
+            client.name + " n'a pas été validé.",
         })
       }
 
@@ -311,7 +346,7 @@ export function ClientManagement({
     <div className="relative">
       <div className="rounded-2xl border border-border bg-card shadow-sm">
         <div className="border-b border-border p-5">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="font-display text-lg font-bold">
                 Gestion des clients
@@ -326,7 +361,7 @@ export function ClientManagement({
               type="button"
               onClick={reload}
               disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
             >
               {loading ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -335,6 +370,43 @@ export function ClientManagement({
               )}
             </button>
           </div>
+
+          {!loading && clients.length > 0 && (
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(event.target.value)
+                  }
+                  placeholder="Rechercher un client..."
+                  aria-label="Rechercher un client"
+                  className="h-10 w-full rounded-lg border border-border bg-background pl-10 pr-10 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Effacer la recherche"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="shrink-0 text-sm text-muted-foreground">
+                {filteredClients.length}{' '}
+                {filteredClients.length > 1
+                  ? 'clients'
+                  : 'client'}
+              </div>
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -356,23 +428,47 @@ export function ClientManagement({
               Les clients de votre boutique apparaîtront ici.
             </p>
           </div>
+        ) : filteredClients.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center p-6 text-center">
+            <Search className="size-10 text-muted-foreground" />
+
+            <p className="mt-3 font-semibold">
+              Aucun client trouvé
+            </p>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              Aucun client ne correspond à « {search} ».
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="mt-4 inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Effacer la recherche
+            </button>
+          </div>
         ) : (
-          <div className="divide-y divide-border">
-            {clients.map((client) => {
-              const isSuspended = client.status === 'suspendu'
-              const isPending = client.status === 'en_attente'
+          <div className="grid grid-cols-1 divide-y divide-border lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+            {filteredClients.map((client) => {
+              const isSuspended =
+                client.status === 'suspendu'
+              const isPending =
+                client.status === 'en_attente'
 
               return (
                 <div
                   key={client.id}
-                  className="flex flex-col gap-4 p-5 transition-colors hover:bg-muted/30 lg:flex-row lg:items-center lg:justify-between"
+                  className="flex min-w-0 flex-col gap-4 p-5 transition-colors hover:bg-muted/30"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <button
                       type="button"
                       onClick={() => openProfile(client)}
                       className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary transition-colors hover:bg-primary/20"
-                      aria-label={`Voir le profil de ${client.name}`}
+                      aria-label={
+                        'Voir le profil de ' + client.name
+                      }
                     >
                       {getInitials(client.name) || (
                         <UserRound className="size-5" />
@@ -389,7 +485,8 @@ export function ClientManagement({
                       </p>
 
                       <p className="truncate text-sm text-muted-foreground">
-                        {client.email || 'Email non renseigné'}
+                        {client.email ||
+                          'Email non renseigné'}
                       </p>
 
                       {client.phone && (
@@ -473,7 +570,9 @@ export function ClientManagement({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => openSuspension(client)}
+                        onClick={() =>
+                          openSuspension(client)
+                        }
                         disabled={saving}
                         className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-500/30 px-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
                       >
@@ -526,7 +625,8 @@ export function ClientManagement({
                 </h4>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {profileClient.email || 'Email non renseigné'}
+                  {profileClient.email ||
+                    'Email non renseigné'}
                 </p>
 
                 {profileClient.phone && (
@@ -579,7 +679,9 @@ export function ClientManagement({
 
                 <button
                   type="button"
-                  onClick={() => openWhatsApp(profileClient)}
+                  onClick={() =>
+                    openWhatsApp(profileClient)
+                  }
                   className="flex w-full items-center gap-3 rounded-xl border border-border p-4 text-left transition-colors hover:bg-muted"
                 >
                   <span className="flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -597,11 +699,14 @@ export function ClientManagement({
                   </span>
                 </button>
 
-                {profileClient.status === 'en_attente' ? (
+                {profileClient.status ===
+                'en_attente' ? (
                   <>
                     <button
                       type="button"
-                      onClick={() => validate(profileClient)}
+                      onClick={() =>
+                        validate(profileClient)
+                      }
                       disabled={saving}
                       className="flex w-full items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 disabled:opacity-50"
                     >
@@ -622,7 +727,9 @@ export function ClientManagement({
 
                     <button
                       type="button"
-                      onClick={() => refuse(profileClient)}
+                      onClick={() =>
+                        refuse(profileClient)
+                      }
                       disabled={saving}
                       className="flex w-full items-center gap-3 rounded-xl border border-red-500/30 p-4 text-left transition-colors hover:bg-red-500/10 disabled:opacity-50"
                     >
@@ -641,10 +748,13 @@ export function ClientManagement({
                       </span>
                     </button>
                   </>
-                ) : profileClient.status === 'suspendu' ? (
+                ) : profileClient.status ===
+                  'suspendu' ? (
                   <button
                     type="button"
-                    onClick={() => reactivate(profileClient)}
+                    onClick={() =>
+                      reactivate(profileClient)
+                    }
                     disabled={saving}
                     className="flex w-full items-center gap-3 rounded-xl border border-emerald-500/30 p-4 text-left transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
                   >
@@ -698,9 +808,11 @@ export function ClientManagement({
                     </dt>
 
                     <dd className="font-medium">
-                      {profileClient.status === 'actif'
+                      {profileClient.status ===
+                      'actif'
                         ? 'Actif'
-                        : profileClient.status === 'suspendu'
+                        : profileClient.status ===
+                            'suspendu'
                           ? 'Suspendu'
                           : 'En attente'}
                     </dd>
@@ -712,7 +824,9 @@ export function ClientManagement({
                     </dt>
 
                     <dd className="text-right font-medium">
-                      {formatDate(profileClient.created_at)}
+                      {formatDate(
+                        profileClient.created_at,
+                      )}
                     </dd>
                   </div>
                 </dl>
@@ -732,8 +846,8 @@ export function ClientManagement({
                 </h3>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Le client ne pourra plus utiliser son compte pendant la
-                  suspension.
+                  Le client ne pourra plus utiliser son
+                  compte pendant la suspension.
                 </p>
               </div>
 
@@ -762,7 +876,9 @@ export function ClientManagement({
                 <textarea
                   id="suspension-reason"
                   value={reason}
-                  onChange={(event) => setReason(event.target.value)}
+                  onChange={(event) =>
+                    setReason(event.target.value)
+                  }
                   placeholder="Indiquez la raison de la suspension..."
                   rows={4}
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
@@ -781,12 +897,15 @@ export function ClientManagement({
                   id="suspension-until"
                   type="datetime-local"
                   value={until}
-                  onChange={(event) => setUntil(event.target.value)}
+                  onChange={(event) =>
+                    setUntil(event.target.value)
+                  }
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-primary"
                 />
 
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Laissez vide pour une suspension sans date de fin.
+                  Laissez vide pour une suspension sans
+                  date de fin.
                 </p>
               </div>
 
@@ -857,7 +976,9 @@ export function ClientManagement({
               <div className="mt-6 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setConfirmation(null)}
+                  onClick={() =>
+                    setConfirmation(null)
+                  }
                   disabled={saving}
                   className="h-10 rounded-lg border border-border px-5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
                 >
