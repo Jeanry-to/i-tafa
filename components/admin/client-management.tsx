@@ -18,6 +18,7 @@ import {
   isClientSuspended,
   reactivateClient,
   suspendClient,
+  updateClientStatus,
   validateClient,
   type Client,
 } from '@/lib/services/api'
@@ -77,6 +78,11 @@ export function ClientManagement({
   const [until, setUntil] = useState('')
 
   const [saving, setSaving] = useState(false)
+
+  const [confirmation, setConfirmation] = useState<{
+    type: 'validate' | 'refuse'
+    client: Client
+  } | null>(null)
 
   async function reload() {
     try {
@@ -153,7 +159,8 @@ export function ClientManagement({
   function callClient(client: Client) {
     if (!client.phone) {
       toast.error('Numéro indisponible', {
-        description: 'Ce client n’a pas de numéro de téléphone enregistré.',
+        description:
+          'Ce client n’a pas de numéro de téléphone enregistré.',
       })
       return
     }
@@ -164,7 +171,8 @@ export function ClientManagement({
   function openWhatsApp(client: Client) {
     if (!client.phone) {
       toast.error('Numéro indisponible', {
-        description: 'Ce client n’a pas de numéro de téléphone enregistré.',
+        description:
+          'Ce client n’a pas de numéro de téléphone enregistré.',
       })
       return
     }
@@ -173,7 +181,8 @@ export function ClientManagement({
 
     if (!number) {
       toast.error('Numéro invalide', {
-        description: 'Le numéro de téléphone du client est invalide.',
+        description:
+          'Le numéro de téléphone du client est invalide.',
       })
       return
     }
@@ -185,7 +194,9 @@ export function ClientManagement({
     )
   }
 
-  async function saveSuspension(event: React.FormEvent<HTMLFormElement>) {
+  async function saveSuspension(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault()
 
     if (!selected) return
@@ -224,7 +235,8 @@ export function ClientManagement({
       await reactivateClient(client.id)
 
       toast.success('Client réactivé', {
-        description: `${client.name} peut de nouveau utiliser son compte.`,
+        description:
+          `${client.name} peut de nouveau utiliser son compte.`,
       })
 
       setProfileClient(null)
@@ -241,16 +253,43 @@ export function ClientManagement({
     }
   }
 
-  async function validate(client: Client) {
+  function validate(client: Client) {
+    setConfirmation({
+      type: 'validate',
+      client,
+    })
+  }
+
+  function refuse(client: Client) {
+    setConfirmation({
+      type: 'refuse',
+      client,
+    })
+  }
+
+  async function confirmAction() {
+    if (!confirmation) return
+
+    const { type, client } = confirmation
+
     try {
       setSaving(true)
 
-      await validateClient(client.id)
+      if (type === 'validate') {
+        await validateClient(client.id)
 
-      toast.success('Client validé', {
-        description: `${client.name} est maintenant actif.`,
-      })
+        toast.success('Client validé', {
+          description: `${client.name} est maintenant actif.`,
+        })
+      } else {
+        await updateClientStatus(client.id, 'suspendu')
 
+        toast.success('Inscription refusée', {
+          description: `${client.name} n'a pas été validé.`,
+        })
+      }
+
+      setConfirmation(null)
       setProfileClient(null)
 
       await reload()
@@ -258,7 +297,10 @@ export function ClientManagement({
       console.error(error)
 
       toast.error('Erreur', {
-        description: 'Impossible de valider ce client.',
+        description:
+          type === 'validate'
+            ? 'Impossible de valider ce client.'
+            : "Impossible de refuser l'inscription de ce client.",
       })
     } finally {
       setSaving(false)
@@ -395,17 +437,27 @@ export function ClientManagement({
                     </button>
 
                     {isPending ? (
-                      <button
-                        type="button"
-                        onClick={() => validate(client)}
-                        disabled={saving}
-                        className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                      >
-                        {saving && (
-                          <Loader2 className="size-4 animate-spin" />
-                        )}
-                        Valider
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => validate(client)}
+                          disabled={saving}
+                          className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="size-4" />
+                          Valider
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => refuse(client)}
+                          disabled={saving}
+                          className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-500/30 px-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
+                        >
+                          <X className="size-4" />
+                          Refuser
+                        </button>
+                      </>
                     ) : isSuspended ? (
                       <button
                         type="button"
@@ -546,26 +598,49 @@ export function ClientManagement({
                 </button>
 
                 {profileClient.status === 'en_attente' ? (
-                  <button
-                    type="button"
-                    onClick={() => validate(profileClient)}
-                    disabled={saving}
-                    className="flex w-full items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 disabled:opacity-50"
-                  >
-                    <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <CheckCircle2 className="size-5" />
-                    </span>
-
-                    <span>
-                      <span className="block text-sm font-semibold">
-                        Valider le client
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => validate(profileClient)}
+                      disabled={saving}
+                      className="flex w-full items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <CheckCircle2 className="size-5" />
                       </span>
 
-                      <span className="block text-xs text-muted-foreground">
-                        Autoriser l’accès au compte
+                      <span>
+                        <span className="block text-sm font-semibold">
+                          Valider le client
+                        </span>
+
+                        <span className="block text-xs text-muted-foreground">
+                          Autoriser l’accès au compte
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => refuse(profileClient)}
+                      disabled={saving}
+                      className="flex w-full items-center gap-3 rounded-xl border border-red-500/30 p-4 text-left transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                    >
+                      <span className="flex size-10 items-center justify-center rounded-lg bg-red-500/10 text-red-600">
+                        <X className="size-5" />
+                      </span>
+
+                      <span>
+                        <span className="block text-sm font-semibold">
+                          Refuser l’inscription
+                        </span>
+
+                        <span className="block text-xs text-muted-foreground">
+                          Refuser cette nouvelle inscription
+                        </span>
+                      </span>
+                    </button>
+                  </>
                 ) : profileClient.status === 'suspendu' ? (
                   <button
                     type="button"
@@ -618,7 +693,10 @@ export function ClientManagement({
 
                 <dl className="mt-3 space-y-3 text-sm">
                   <div className="flex justify-between gap-4">
-                    <dt className="text-muted-foreground">Statut</dt>
+                    <dt className="text-muted-foreground">
+                      Statut
+                    </dt>
+
                     <dd className="font-medium">
                       {profileClient.status === 'actif'
                         ? 'Actif'
@@ -629,7 +707,10 @@ export function ClientManagement({
                   </div>
 
                   <div className="flex justify-between gap-4">
-                    <dt className="text-muted-foreground">Inscription</dt>
+                    <dt className="text-muted-foreground">
+                      Inscription
+                    </dt>
+
                     <dd className="text-right font-medium">
                       {formatDate(profileClient.created_at)}
                     </dd>
@@ -666,7 +747,10 @@ export function ClientManagement({
               </button>
             </div>
 
-            <form onSubmit={saveSuspension} className="space-y-5 p-5">
+            <form
+              onSubmit={saveSuspension}
+              className="space-y-5 p-5"
+            >
               <div>
                 <label
                   htmlFor="suspension-reason"
@@ -728,6 +812,78 @@ export function ClientManagement({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {confirmation && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-background shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex size-11 items-center justify-center rounded-full ${
+                    confirmation.type === 'validate'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-red-500/10 text-red-600'
+                  }`}
+                >
+                  {confirmation.type === 'validate' ? (
+                    <CheckCircle2 className="size-6" />
+                  ) : (
+                    <X className="size-6" />
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="font-display text-lg font-bold">
+                    {confirmation.type === 'validate'
+                      ? 'Confirmer la validation'
+                      : 'Confirmer le refus'}
+                  </h3>
+
+                  <p className="text-sm text-muted-foreground">
+                    {confirmation.client.name}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-5 text-sm text-muted-foreground">
+                {confirmation.type === 'validate'
+                  ? 'Voulez-vous vraiment valider cette inscription et autoriser l’accès au compte ?'
+                  : 'Voulez-vous vraiment refuser cette inscription ? Le compte ne sera pas activé.'}
+              </p>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmation(null)}
+                  disabled={saving}
+                  className="h-10 rounded-lg border border-border px-5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  Non
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmAction}
+                  disabled={saving}
+                  className={`inline-flex h-10 items-center gap-2 rounded-lg px-5 text-sm font-medium text-white disabled:opacity-50 ${
+                    confirmation.type === 'validate'
+                      ? 'bg-primary hover:opacity-90'
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                >
+                  {saving && (
+                    <Loader2 className="size-4 animate-spin" />
+                  )}
+
+                  {confirmation.type === 'validate'
+                    ? 'Oui, valider'
+                    : 'Oui, refuser'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
