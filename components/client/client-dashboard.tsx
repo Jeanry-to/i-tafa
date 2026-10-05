@@ -38,6 +38,7 @@ import {
 } from '@/components/dashboard/dashboard-shell'
 
 import { RulesCard } from '@/components/rules-card'
+import { ClientOverview } from '@/components/client/client-overview'
 
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -439,10 +440,11 @@ export function ClientDashboard() {
 
         {/* TABLEAU DE BORD */}
         {view === 'overview' && (
-          <Overview
+          <ClientOverview
+            hasShop={hasShop}
+            profileId={profile.id}
+            onGo={setActive}
             announcements={announcements}
-            onOpenMessages={() => setActive('messages')}
-            onOpenAssistant={() => setActive('assistant')}
           />
         )}
 
