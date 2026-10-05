@@ -1,4 +1,4 @@
-﻿import * as tus from 'tus-js-client'
+import * as tus from 'tus-js-client'
 import { supabase } from '@/lib/supabase'
 
 export type ClientStatus = 'actif' | 'suspendu' | 'en_attente'
@@ -1711,6 +1711,7 @@ export async function getAllPaymentMethods() {
       .select(
         'id, type, label, account_details, instructions, active, sort_order',
       )
+      .eq('shop_id', await getCurrentShopId())
       .order('sort_order', {
         ascending: true,
       }),
@@ -2100,6 +2101,7 @@ export async function getProducts() {
     await supabase
       .from('products')
       .select('*')
+      .eq('shop_id', await getCurrentShopId())
       .order('sort_order', {
         ascending: true,
       }),
@@ -2287,6 +2289,7 @@ export async function getKnowledgeBase() {
     await supabase
       .from('knowledge_base')
       .select('*')
+      .eq('shop_id', await getCurrentShopId())
       .order('updated_at', {
         ascending: false,
       }),
@@ -2365,6 +2368,7 @@ export async function getFaqs() {
       .select(
         'id, question, answer',
       )
+      .eq('shop_id', await getCurrentShopId())
       .order('sort_order', {
         ascending: true,
       }),
@@ -3393,4 +3397,3 @@ export async function getActiveLiveSession(): Promise<LiveSession | null> {
     endedAt: data.ended_at,
   }
 }
-
