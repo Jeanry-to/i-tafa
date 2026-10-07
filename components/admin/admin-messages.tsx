@@ -175,7 +175,7 @@ export function AdminMessages({
     try {
       await suspendClient(
         selectedClient.id,
-        suspendReason.trim() || undefined,
+        { reason: suspendReason.trim() },
       )
 
       toast.success('Client suspendu')
