@@ -20,13 +20,17 @@ const GROQ_API_KEY =
   process.env.GROQ_API_KEY || ''
 
 const GROQ_MODEL =
-  process.env.GROQ_MODEL || 'openai/gpt-oss-20b'
+  process.env.GROQ_MODEL ||
+  'openai/gpt-oss-20b'
 
 const GROQ_URL =
   'https://api.groq.com/openai/v1/chat/completions'
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+const MAX_FILE_SIZE =
+  10 * 1024 * 1024
+
 const MAX_FILES = 5
+
 const MAX_MESSAGE_LENGTH = 12000
 
 // Limites destinées à réduire la consommation TPM
@@ -42,12 +46,16 @@ const MAX_FILE_CHARS = 5000
 
 const supabase =
   SUPABASE_URL && SUPABASE_KEY
-    ? createClient(SUPABASE_URL, SUPABASE_KEY, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
+    ? createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY,
+        {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
         },
-      })
+      )
     : null
 
 // ======================================================
@@ -55,7 +63,10 @@ const supabase =
 // ======================================================
 
 type ChatMessage = {
-  role: 'system' | 'user' | 'assistant'
+  role:
+    | 'system'
+    | 'user'
+    | 'assistant'
   content: string
 }
 
@@ -69,6 +80,17 @@ type AgentSettings = {
   priority_info?: string
   forbidden_info?: string
   custom_instructions?: string
+  auto_reply_enabled?: boolean
+}
+
+type ShopData = {
+  shopId: string
+  ownerId: string
+  business: Record<string, unknown>
+  products: Record<string, unknown>[]
+  knowledge: Record<string, unknown>[]
+  faqs: Record<string, unknown>[]
+  settings: AgentSettings
 }
 
 // ======================================================
@@ -88,7 +110,9 @@ function jsonError(
   )
 }
 
-function safeString(value: unknown): string {
+function safeString(
+  value: unknown,
+): string {
   if (typeof value === 'string') {
     return value.trim()
   }
@@ -107,20 +131,26 @@ function limitText(
   value: unknown,
   maxChars: number,
 ): string {
-  const text = safeString(value)
+  const text =
+    safeString(value)
 
   if (text.length <= maxChars) {
     return text
   }
 
-  return text.slice(0, maxChars) + '\n[contenu tronqué]'
+  return (
+    text.slice(0, maxChars) +
+    '\n[contenu tronqué]'
+  )
 }
 
 function getExtension(
   filename: string,
 ): string {
   const parts =
-    filename.toLowerCase().split('.')
+    filename
+      .toLowerCase()
+      .split('.')
 
   if (parts.length < 2) {
     return ''
@@ -130,10 +160,111 @@ function getExtension(
 }
 
 // ======================================================
-// FICHIERS TEXTE
+// VERIFICATION SUSPENSION CLIENT
 // ======================================================
 
-function isTextFile(file: File): boolean {
+export async function isClientSuspended(
+  clientId: string,
+): Promise<boolean> {
+  if (!supabase) {
+    throw new Error(
+      'Configuration Supabase manquante.',
+    )
+  }
+
+  // ----------------------------------------------------
+  // CLIENT
+  // ----------------------------------------------------
+
+  const {
+    data: client,
+    error: clientError,
+  } =
+    await supabase
+      .from('clients')
+      .select(
+        'id, status, profile_id',
+      )
+      .eq(
+        'id',
+        clientId,
+      )
+      .maybeSingle()
+
+  if (clientError) {
+    console.error(
+      'Erreur vérification suspension client :',
+      clientError.message,
+    )
+
+    throw new Error(
+      'Impossible de vérifier le statut du client.',
+    )
+  }
+
+  if (!client) {
+    throw new Error(
+      'Client introuvable.',
+    )
+  }
+
+  // ----------------------------------------------------
+  // STATUT CLIENT
+  // ----------------------------------------------------
+
+  if (
+    client.status ===
+    'suspendu'
+  ) {
+    return true
+  }
+
+  // ----------------------------------------------------
+  // PROFIL
+  // ----------------------------------------------------
+
+  if (!client.profile_id) {
+    return false
+  }
+
+  const {
+    data: profile,
+    error: profileError,
+  } =
+    await supabase
+      .from('profiles')
+      .select(
+        'id, is_suspended',
+      )
+      .eq(
+        'id',
+        client.profile_id,
+      )
+      .maybeSingle()
+
+  if (profileError) {
+    console.error(
+      'Erreur vérification profil suspendu :',
+      profileError.message,
+    )
+
+    throw new Error(
+      'Impossible de vérifier la suspension du profil.',
+    )
+  }
+
+  return (
+    profile?.is_suspended === true
+  )
+}
+
+// ======================================================
+// FICHIERS
+// ======================================================
+
+function isTextFile(
+  file: File,
+): boolean {
   const extension =
     getExtension(file.name)
 
@@ -167,7 +298,10 @@ function isTextFile(file: File): boolean {
 async function extractFileText(
   file: File,
 ): Promise<string> {
-  if (file.size > MAX_FILE_SIZE) {
+  if (
+    file.size >
+    MAX_FILE_SIZE
+  ) {
     return (
       '[Fichier trop volumineux : ' +
       file.name +
@@ -175,7 +309,9 @@ async function extractFileText(
     )
   }
 
-  if (!isTextFile(file)) {
+  if (
+    !isTextFile(file)
+  ) {
     return (
       '[Le contenu du fichier ' +
       file.name +
@@ -224,7 +360,9 @@ function parseHistory(
     const parsed =
       JSON.parse(rawHistory)
 
-    if (!Array.isArray(parsed)) {
+    if (
+      !Array.isArray(parsed)
+    ) {
       return []
     }
 
@@ -235,32 +373,41 @@ function parseHistory(
             item &&
             (
               item.role === 'user' ||
-              item.role === 'assistant'
+              item.role ===
+                'assistant'
             ) &&
-            typeof item.content === 'string'
+            typeof item.content ===
+              'string'
           )
         })
-        .slice(-MAX_HISTORY_MESSAGES)
+        .slice(
+          -MAX_HISTORY_MESSAGES,
+        )
         .map((item) => ({
-          role: item.role as
-            | 'user'
-            | 'assistant',
-          content: limitText(
-            item.content,
-            1800,
-          ),
+          role:
+            item.role as
+              | 'user'
+              | 'assistant',
+          content:
+            limitText(
+              item.content,
+              1800,
+            ),
         }))
 
-    const result: ChatMessage[] = []
+    const result: ChatMessage[] =
+      []
 
     let totalChars = 0
 
     for (
-      let i = messages.length - 1;
+      let i =
+        messages.length - 1;
       i >= 0;
       i--
     ) {
-      const item = messages[i]
+      const item =
+        messages[i]
 
       if (
         totalChars +
@@ -286,23 +433,33 @@ function parseHistory(
 // DONNEES DE LA BOUTIQUE
 // ======================================================
 
-async function getShopData(
+export async function getShopData(
   clientId: string,
-) {
+): Promise<ShopData> {
   if (!supabase) {
     throw new Error(
       'Configuration Supabase manquante.',
     )
   }
 
+  // ----------------------------------------------------
+  // CLIENT
+  // ----------------------------------------------------
+
   const {
     data: client,
     error: clientError,
-  } = await supabase
-    .from('clients')
-    .select('id, shop_id')
-    .eq('id', clientId)
-    .maybeSingle()
+  } =
+    await supabase
+      .from('clients')
+      .select(
+        'id, shop_id',
+      )
+      .eq(
+        'id',
+        clientId,
+      )
+      .maybeSingle()
 
   if (clientError) {
     console.error(
@@ -324,7 +481,51 @@ async function getShopData(
     )
   }
 
-  const shopId = client.shop_id
+  const shopId =
+    client.shop_id
+
+  // ----------------------------------------------------
+  // BOUTIQUE + PROPRIETAIRE
+  // ----------------------------------------------------
+
+  const {
+    data: shop,
+    error: shopError,
+  } =
+    await supabase
+      .from('shops')
+      .select(
+        'id, owner_id',
+      )
+      .eq(
+        'id',
+        shopId,
+      )
+      .maybeSingle()
+
+  if (shopError) {
+    console.error(
+      'Erreur recherche boutique :',
+      shopError.message,
+    )
+
+    throw new Error(
+      `Impossible de récupérer la boutique : ${shopError.message}`,
+    )
+  }
+
+  if (
+    !shop ||
+    !shop.owner_id
+  ) {
+    throw new Error(
+      'Propriétaire de la boutique introuvable.',
+    )
+  }
+
+  // ----------------------------------------------------
+  // DONNEES
+  // ----------------------------------------------------
 
   const [
     businessResult,
@@ -332,80 +533,115 @@ async function getShopData(
     knowledgeResult,
     faqsResult,
     settingsResult,
-  ] = await Promise.all([
-    supabase
-      .from('business_info')
-      .select(
-        'name,description,sector,address,service_area,phone,email,website,opening_hours,closed_days,preferred_contact',
-      )
-      .eq('shop_id', shopId)
-      .limit(1)
-      .maybeSingle(),
+  ] =
+    await Promise.all([
+      supabase
+        .from(
+          'business_info',
+        )
+        .select(
+          'name,description,sector,address,service_area,phone,email,website,opening_hours,closed_days,preferred_contact',
+        )
+        .eq(
+          'shop_id',
+          shopId,
+        )
+        .limit(1)
+        .maybeSingle(),
 
-    supabase
-      .from('products')
-      .select(
-        'name,description,price,currency,available,promotion,discount,features,conditions,order_conditions,delivery_conditions',
-      )
-      .eq('shop_id', shopId)
-      .eq('available', true)
-      .limit(50),
+      supabase
+        .from('products')
+        .select(
+          'name,description,price,currency,available,promotion,discount,features,conditions,order_conditions,delivery_conditions',
+        )
+        .eq(
+          'shop_id',
+          shopId,
+        )
+        .eq(
+          'available',
+          true,
+        )
+        .limit(50),
 
-    supabase
-      .from('knowledge_base')
-      .select(
-        'category,title,content',
-      )
-      .eq('shop_id', shopId)
-      .limit(50),
+      supabase
+        .from(
+          'knowledge_base',
+        )
+        .select(
+          'category,title,content',
+        )
+        .eq(
+          'shop_id',
+          shopId,
+        )
+        .limit(50),
 
-    supabase
-      .from('faqs')
-      .select(
-        'question,answer',
-      )
-      .eq('shop_id', shopId)
-      .limit(50),
+      supabase
+        .from('faqs')
+        .select(
+          'question,answer',
+        )
+        .eq(
+          'shop_id',
+          shopId,
+        )
+        .limit(50),
 
-    supabase
-      .from('agent_settings')
-      .select(
-        'tone,formality,response_length,language,price_presentation,product_presentation,priority_info,forbidden_info,custom_instructions',
-      )
-      .eq('shop_id', shopId)
-      .limit(1)
-      .maybeSingle(),
-  ])
+      supabase
+        .from(
+          'agent_settings',
+        )
+        .select(
+          'tone,formality,response_length,language,price_presentation,product_presentation,priority_info,forbidden_info,custom_instructions,auto_reply_enabled',
+        )
+        .eq(
+          'shop_id',
+          shopId,
+        )
+        .limit(1)
+        .maybeSingle(),
+    ])
 
-  if (businessResult.error) {
+  if (
+    businessResult.error
+  ) {
     console.error(
       'Erreur business_info:',
       businessResult.error.message,
     )
   }
 
-  if (productsResult.error) {
+  if (
+    productsResult.error
+  ) {
     console.error(
       'Erreur products:',
       productsResult.error.message,
     )
   }
 
-  if (knowledgeResult.error) {
+  if (
+    knowledgeResult.error
+  ) {
     console.error(
       'Erreur knowledge_base:',
       knowledgeResult.error.message,
     )
   }
 
-  if (faqsResult.error) {
+  if (
+    faqsResult.error
+  ) {
     console.error(
       'Erreur faqs:',
       faqsResult.error.message,
     )
   }
 
-  if (settingsResult.error) {
+  if (
+    settingsResult.error
+  ) {
     console.error(
       'Erreur agent_settings:',
       settingsResult.error.message,
@@ -413,17 +649,37 @@ async function getShopData(
   }
 
   return {
+    shopId,
+    ownerId:
+      shop.owner_id,
+
     business:
-      businessResult.data || {},
+      (businessResult.data ||
+        {}) as Record<
+        string,
+        unknown
+      >,
 
     products:
-      productsResult.data || [],
+      (productsResult.data ||
+        []) as Record<
+        string,
+        unknown
+      >[],
 
     knowledge:
-      knowledgeResult.data || [],
+      (knowledgeResult.data ||
+        []) as Record<
+        string,
+        unknown
+      >[],
 
     faqs:
-      faqsResult.data || [],
+      (faqsResult.data ||
+        []) as Record<
+        string,
+        unknown
+      >[],
 
     settings:
       (settingsResult.data ||
@@ -432,24 +688,57 @@ async function getShopData(
 }
 
 // ======================================================
-// FORMATAGE DES DONNEES
+// FORMATAGE
 // ======================================================
 
 function formatBusiness(
-  business: Record<string, unknown>,
+  business: Record<
+    string,
+    unknown
+  >,
 ): string {
   const fields = [
     ['Nom', business.name],
-    ['Description', business.description],
-    ['Secteur', business.sector],
-    ['Adresse', business.address],
-    ['Zone desservie', business.service_area],
-    ['Téléphone', business.phone],
-    ['Email', business.email],
-    ['Site web', business.website],
-    ['Horaires', business.opening_hours],
-    ['Jours de fermeture', business.closed_days],
-    ['Contact privilégié', business.preferred_contact],
+    [
+      'Description',
+      business.description,
+    ],
+    [
+      'Secteur',
+      business.sector,
+    ],
+    [
+      'Adresse',
+      business.address,
+    ],
+    [
+      'Zone desservie',
+      business.service_area,
+    ],
+    [
+      'Téléphone',
+      business.phone,
+    ],
+    [
+      'Email',
+      business.email,
+    ],
+    [
+      'Site web',
+      business.website,
+    ],
+    [
+      'Horaires',
+      business.opening_hours,
+    ],
+    [
+      'Jours de fermeture',
+      business.closed_days,
+    ],
+    [
+      'Contact privilégié',
+      business.preferred_contact,
+    ],
   ]
 
   return limitText(
@@ -468,52 +757,60 @@ function formatBusiness(
 }
 
 function formatProducts(
-  products: Record<string, unknown>[],
+  products: Record<
+    string,
+    unknown
+  >[],
 ): string {
-  const lines = products.map(
-    (product) => {
-      const parts = [
-        safeString(product.name),
+  const lines =
+    products.map(
+      (product) => {
+        const parts = [
+          safeString(
+            product.name,
+          ),
 
-        product.price !== null &&
-        product.price !== undefined
-          ? `Prix: ${safeString(product.price)} ${safeString(product.currency) || 'MGA'}`
-          : '',
+          product.price !==
+              null &&
+          product.price !==
+              undefined
+            ? `Prix: ${safeString(product.price)} ${safeString(product.currency) || 'MGA'}`
+            : '',
 
-        product.description
-          ? `Description: ${limitText(product.description, 350)}`
-          : '',
+          product.description
+            ? `Description: ${limitText(product.description, 350)}`
+            : '',
 
-        product.promotion
-          ? `Promotion: ${limitText(product.promotion, 250)}`
-          : '',
+          product.promotion
+            ? `Promotion: ${limitText(product.promotion, 250)}`
+            : '',
 
-        product.discount
-          ? `Réduction: ${limitText(product.discount, 200)}`
-          : '',
+          product.discount
+            ? `Réduction: ${limitText(product.discount, 200)}`
+            : '',
 
-        product.features
-          ? `Caractéristiques: ${limitText(product.features, 250)}`
-          : '',
+          product.features
+            ? `Caractéristiques: ${limitText(product.features, 250)}`
+            : '',
 
-        product.conditions
-          ? `Conditions: ${limitText(product.conditions, 250)}`
-          : '',
+          product.conditions
+            ? `Conditions: ${limitText(product.conditions, 250)}`
+            : '',
 
-        product.order_conditions
-          ? `Commande: ${limitText(product.order_conditions, 250)}`
-          : '',
+          product.order_conditions
+            ? `Commande: ${limitText(product.order_conditions, 250)}`
+            : '',
 
-        product.delivery_conditions
-          ? `Livraison: ${limitText(product.delivery_conditions, 250)}`
-          : '',
-      ]
+          product.delivery_conditions
+            ? `Livraison: ${limitText(product.delivery_conditions, 250)}`
+            : '',
+        ]
 
-      return parts
-        .filter(Boolean)
-        .join(' | ')
-    },
-  )
+        return parts
+          .filter(Boolean)
+          .join(' | ')
+      },
+    )
 
   return limitText(
     lines.join('\n'),
@@ -522,17 +819,21 @@ function formatProducts(
 }
 
 function formatKnowledge(
-  knowledge: Record<string, unknown>[],
+  knowledge: Record<
+    string,
+    unknown
+  >[],
 ): string {
-  const lines = knowledge.map(
-    (item) => {
-      return (
-        `[${safeString(item.category)}] ` +
-        `${safeString(item.title)} : ` +
-        `${limitText(item.content, 500)}`
-      )
-    },
-  )
+  const lines =
+    knowledge.map(
+      (item) => {
+        return (
+          `[${safeString(item.category)}] ` +
+          `${safeString(item.title)} : ` +
+          `${limitText(item.content, 500)}`
+        )
+      },
+    )
 
   return limitText(
     lines.join('\n'),
@@ -541,16 +842,20 @@ function formatKnowledge(
 }
 
 function formatFaqs(
-  faqs: Record<string, unknown>[],
+  faqs: Record<
+    string,
+    unknown
+  >[],
 ): string {
-  const lines = faqs.map(
-    (faq) => {
-      return (
-        `Q: ${safeString(faq.question)}\n` +
-        `R: ${safeString(faq.answer)}`
-      )
-    },
-  )
+  const lines =
+    faqs.map(
+      (faq) => {
+        return (
+          `Q: ${safeString(faq.question)}\n` +
+          `R: ${safeString(faq.answer)}`
+        )
+      },
+    )
 
   return limitText(
     lines.join('\n\n'),
@@ -559,15 +864,14 @@ function formatFaqs(
 }
 
 // ======================================================
-// PROMPT SYSTEME
+// PROMPT
 // ======================================================
 
-function buildSystemPrompt(
-  shopData: Awaited<
-    ReturnType<typeof getShopData>
-  >,
+export function buildSystemPrompt(
+  shopData: ShopData,
   fileContents: string[],
 ): string {
+
   const settings =
     shopData.settings
 
@@ -633,20 +937,29 @@ ${behavior || 'Paramètres par défaut.'}
 ${forbidden}
 
 INFORMATIONS DE LA BOUTIQUE:
-${formatBusiness(shopData.business as Record<string, unknown>) || 'Aucune information.'}
+${formatBusiness(
+  shopData.business,
+) || 'Aucune information.'}
 
 PRODUITS ET SERVICES:
-${formatProducts(shopData.products as Record<string, unknown>[]) || 'Aucun produit ou service disponible.'}
+${formatProducts(
+  shopData.products,
+) || 'Aucun produit ou service disponible.'}
 
 BASE DE CONNAISSANCES:
-${formatKnowledge(shopData.knowledge as Record<string, unknown>[]) || 'Aucune information.'}
+${formatKnowledge(
+  shopData.knowledge,
+) || 'Aucune information.'}
 
 FAQ:
-${formatFaqs(shopData.faqs as Record<string, unknown>[]) || 'Aucune FAQ.'}
+${formatFaqs(
+  shopData.faqs,
+) || 'Aucune FAQ.'}
 `
 
   if (
-    fileContents.length > 0
+    fileContents.length >
+    0
   ) {
     const filesText =
       limitText(
@@ -670,13 +983,15 @@ Analyse uniquement le contenu effectivement extrait des fichiers.
 }
 
 // ======================================================
-// TOKENS DE REPONSE
+// TOKENS
 // ======================================================
 
 function resolveMaxTokens(
   responseLength?: string,
 ): number {
-  switch (responseLength) {
+  switch (
+    responseLength
+  ) {
     case 'courte':
       return 250
 
@@ -690,10 +1005,10 @@ function resolveMaxTokens(
 }
 
 // ======================================================
-// APPEL GROQ
+// GROQ
 // ======================================================
 
-async function callGroq(
+export async function callGroq(
   messages: ChatMessage[],
   maxTokens: number,
 ): Promise<string> {
@@ -704,30 +1019,30 @@ async function callGroq(
   }
 
   const response =
-    await fetch(GROQ_URL, {
-      method: 'POST',
+    await fetch(
+      GROQ_URL,
+      {
+        method: 'POST',
 
-      headers: {
-        Authorization:
-          'Bearer ' +
-          GROQ_API_KEY,
+        headers: {
+          Authorization:
+            'Bearer ' +
+            GROQ_API_KEY,
 
-        'Content-Type':
-          'application/json',
+          'Content-Type':
+            'application/json',
+        },
+
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages,
+          temperature: 0.3,
+          reasoning_effort: 'low',
+          max_tokens:
+            maxTokens,
+        }),
       },
-
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-
-        messages,
-
-        temperature: 0.3,
-
-        reasoning_effort: 'low',
-
-        max_tokens: maxTokens,
-      }),
-    })
+    )
 
   let result: any
 
@@ -743,10 +1058,15 @@ async function callGroq(
   if (!response.ok) {
     console.error(
       'Erreur Groq:',
-      JSON.stringify(result),
+      JSON.stringify(
+        result,
+      ),
     )
 
-    if (response.status === 429) {
+    if (
+      response.status ===
+      429
+    ) {
       throw new Error(
         'Le service IA est temporairement très sollicité. Réessayez dans quelques secondes.',
       )
@@ -759,10 +1079,13 @@ async function callGroq(
   }
 
   const answer =
-    result?.choices?.[0]?.message?.content
+    result
+      ?.choices?.[0]
+      ?.message?.content
 
   if (
-    typeof answer !== 'string' ||
+    typeof answer !==
+      'string' ||
     !answer.trim()
   ) {
     throw new Error(
@@ -771,6 +1094,196 @@ async function callGroq(
   }
 
   return answer.trim()
+}
+
+// ======================================================
+// ENREGISTRER LA REPONSE IA
+// ======================================================
+
+export async function saveAIMessage(
+  shopData: ShopData,
+  clientId: string,
+  answer: string,
+  replyToId?: string,
+) {
+  if (!supabase) {
+    throw new Error(
+      'Configuration Supabase manquante.',
+    )
+  }
+
+  if (!shopData.ownerId) {
+    throw new Error(
+      'Propriétaire de la boutique introuvable.',
+    )
+  }
+
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from('messages')
+      .insert({
+        shop_id:
+          shopData.shopId,
+
+        client_id:
+          clientId,
+
+        sender_id:
+          shopData.ownerId,
+
+        is_ai: true,
+
+        body:
+          answer,
+
+        reply_to_id:
+          replyToId ?? null,
+
+        attachments: [],
+
+        attachment_type:
+          null,
+
+        attachment_name:
+          null,
+
+        attachment_url:
+          null,
+      })
+      .select(
+        `
+        id,
+        client_id,
+        sender_id,
+        body,
+        sent_at,
+        read_at,
+        reply_to_id
+        `,
+      )
+      .single()
+
+  if (error) {
+    console.error(
+      'Erreur enregistrement réponse IA:',
+      error.message,
+    )
+
+    throw new Error(
+      error.message,
+    )
+  }
+
+  return data
+}
+
+// ======================================================
+// LECTURE DU CORPS DE LA REQUETE
+// ======================================================
+
+async function readRequest(
+  request: Request,
+) {
+  const contentType =
+    request.headers.get(
+      'content-type',
+    ) || ''
+
+  // ----------------------------------------------------
+  // JSON
+  // ----------------------------------------------------
+
+  if (
+    contentType.includes(
+      'application/json',
+    )
+  ) {
+    const body =
+      await request.json()
+
+    return {
+      message:
+        safeString(
+          body?.message,
+        ),
+
+      clientId:
+        safeString(
+          body?.clientId,
+        ),
+
+      rawHistory:
+        safeString(
+          body?.history,
+        ),
+
+      autoReply:
+        Boolean(
+          body?.autoReply,
+        ),
+
+      files:
+        [] as File[],
+    }
+  }
+
+  // ----------------------------------------------------
+  // FORMDATA
+  // ----------------------------------------------------
+
+  const formData =
+    await request.formData()
+
+  const uploadedFiles =
+    formData.getAll(
+      'files',
+    )
+
+  const files: File[] =
+    uploadedFiles.filter(
+      (
+        item,
+      ): item is File => {
+        return (
+          item instanceof File
+        )
+      },
+    )
+
+  return {
+    message:
+      safeString(
+        formData.get(
+          'message',
+        ),
+      ),
+
+    clientId:
+      safeString(
+        formData.get(
+          'clientId',
+        ),
+      ),
+
+    rawHistory:
+      safeString(
+        formData.get(
+          'history',
+        ),
+      ),
+
+    autoReply:
+      safeString(
+        formData.get(
+          'autoReply',
+        ),
+      ) === 'true',
+
+    files,
+  }
 }
 
 // ======================================================
@@ -794,31 +1307,24 @@ export async function POST(
 
     if (!GROQ_API_KEY) {
       return jsonError(
-        "La clé API Groq est manquante dans les variables du serveur.",
+        'La clé API Groq est manquante dans les variables du serveur.',
         500,
       )
     }
 
     // --------------------------------------------------
-    // FORMULAIRE
+    // REQUETE
     // --------------------------------------------------
 
-    const formData =
-      await request.formData()
-
-    const message =
-      safeString(
-        formData.get('message'),
-      )
-
-    const clientId =
-      safeString(
-        formData.get('clientId'),
-      )
-
-    const rawHistory =
-      safeString(
-        formData.get('history'),
+    const {
+      message,
+      clientId,
+      rawHistory,
+      autoReply,
+      files,
+    } =
+      await readRequest(
+        request,
       )
 
     // --------------------------------------------------
@@ -849,33 +1355,6 @@ export async function POST(
       )
     }
 
-    // --------------------------------------------------
-    // HISTORIQUE
-    // --------------------------------------------------
-
-    const history =
-      parseHistory(
-        rawHistory,
-      )
-
-    // --------------------------------------------------
-    // FICHIERS
-    // --------------------------------------------------
-
-    const uploadedFiles =
-      formData.getAll('files')
-
-    const files: File[] =
-      uploadedFiles.filter(
-        (
-          item,
-        ): item is File => {
-          return (
-            item instanceof File
-          )
-        },
-      )
-
     if (
       files.length >
       MAX_FILES
@@ -902,7 +1381,30 @@ export async function POST(
     }
 
     // --------------------------------------------------
-    // DONNEES DE LA BOUTIQUE
+    // VERIFICATION SUSPENSION
+    // IMPORTANT :
+    // Cette vérification est faite AVANT getShopData()
+    // et AVANT tout appel à Groq.
+    // --------------------------------------------------
+
+    const suspended =
+      await isClientSuspended(
+        clientId,
+      )
+
+    if (suspended) {
+      console.warn(
+        `[AGENT] Requête IA refusée pour client suspendu : ${clientId}`,
+      )
+
+      return jsonError(
+        'Votre compte est actuellement suspendu. Vous ne pouvez pas utiliser l’assistant IA tant que votre compte n’est pas réactivé.',
+        403,
+      )
+    }
+
+    // --------------------------------------------------
+    // DONNEES BOUTIQUE
     // --------------------------------------------------
 
     const shopData =
@@ -911,11 +1413,28 @@ export async function POST(
       )
 
     // --------------------------------------------------
-    // EXTRACTION DES FICHIERS
+    // AUTO-REPLY
     // --------------------------------------------------
 
-    const fileContents: string[] =
-      []
+    if (
+      autoReply &&
+      !shopData.settings
+        ?.auto_reply_enabled
+    ) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        reason:
+          'Réponse automatique désactivée.',
+      })
+    }
+
+    // --------------------------------------------------
+    // EXTRACTION FICHIERS
+    // --------------------------------------------------
+
+    const fileContents:
+      string[] = []
 
     for (
       const file of files
@@ -931,6 +1450,15 @@ export async function POST(
     }
 
     // --------------------------------------------------
+    // HISTORIQUE
+    // --------------------------------------------------
+
+    const history =
+      parseHistory(
+        rawHistory,
+      )
+
+    // --------------------------------------------------
     // PROMPT
     // --------------------------------------------------
 
@@ -941,28 +1469,28 @@ export async function POST(
       )
 
     // --------------------------------------------------
-    // MESSAGES
+    // MESSAGES GROQ
     // --------------------------------------------------
 
-    const messages: ChatMessage[] =
-      [
-        {
-          role: 'system',
-          content:
-            systemPrompt,
-        },
+    const messages:
+      ChatMessage[] = [
+      {
+        role: 'system',
+        content:
+          systemPrompt,
+      },
 
-        ...history,
+      ...history,
 
-        {
-          role: 'user',
-          content:
-            message,
-        },
-      ]
+      {
+        role: 'user',
+        content:
+          message,
+      },
+    ]
 
     // --------------------------------------------------
-    // UNIQUE IA : GROQ
+    // GROQ
     // --------------------------------------------------
 
     const maxTokens =
@@ -978,6 +1506,22 @@ export async function POST(
       )
 
     // --------------------------------------------------
+    // ENREGISTREMENT
+    // --------------------------------------------------
+
+    let savedMessage:
+      unknown = null
+
+    if (autoReply) {
+      savedMessage =
+        await saveAIMessage(
+          shopData,
+          clientId,
+          answer,
+        )
+    }
+
+    // --------------------------------------------------
     // REPONSE
     // --------------------------------------------------
 
@@ -985,6 +1529,9 @@ export async function POST(
       success: true,
       reply: answer,
       message: answer,
+      saved:
+        Boolean(savedMessage),
+      savedMessage,
     })
   } catch (error) {
     console.error(
