@@ -1,4 +1,4 @@
-import * as tus from 'tus-js-client'
+﻿import * as tus from 'tus-js-client'
 import { supabase } from '@/lib/supabase'
 
 export type ClientStatus = 'actif' | 'suspendu' | 'en_attente'
@@ -1336,7 +1336,7 @@ export async function deleteMessagesForEveryone(
       .from('messages')
       .update({
         deleted_for_everyone: true,
-        body: 'Message supprimé',
+        body: null,
         attachments: [],
         attachment_type: null,
         attachment_name: null,
@@ -1395,7 +1395,7 @@ export async function deleteMessageForEveryone(
       .from('messages')
       .update({
         deleted_for_everyone: true,
-        body: 'Message supprimé',
+        body: null,
         attachments: [],
         attachment_type: null,
         attachment_name: null,
@@ -2646,15 +2646,16 @@ function mapAgentSettings(
   }
 }
 
-export async function getAgentSettings(): Promise<
-  AgentSettings | null
-> {
+export async function getAgentSettings(): Promise<AgentSettings | null> {
+  const shopId = await getCurrentShopId()
+
   const {
     data,
     error,
   } = await supabase
     .from('agent_settings')
     .select('*')
+    .eq('shop_id', shopId)
     .limit(1)
     .maybeSingle()
 
@@ -2663,9 +2664,7 @@ export async function getAgentSettings(): Promise<
   }
 
   return data
-    ? mapAgentSettings(
-        data as AgentSettingsRow,
-      )
+    ? mapAgentSettings(data as AgentSettingsRow)
     : null
 }
 
