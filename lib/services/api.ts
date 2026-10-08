@@ -1,4 +1,4 @@
-﻿import * as tus from 'tus-js-client'
+import * as tus from 'tus-js-client'
 import { supabase } from '@/lib/supabase'
 
 export type ClientStatus = 'actif' | 'suspendu' | 'en_attente'
@@ -1336,7 +1336,7 @@ export async function deleteMessagesForEveryone(
       .from('messages')
       .update({
         deleted_for_everyone: true,
-        body: null,
+        body: 'Message supprimé',
         attachments: [],
         attachment_type: null,
         attachment_name: null,
@@ -1395,7 +1395,7 @@ export async function deleteMessageForEveryone(
       .from('messages')
       .update({
         deleted_for_everyone: true,
-        body: null,
+        body: 'Message supprimé',
         attachments: [],
         attachment_type: null,
         attachment_name: null,
