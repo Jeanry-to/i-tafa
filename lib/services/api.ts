@@ -50,6 +50,7 @@ export type ChatMessage = {
   id: string
   clientId: string
   senderId: string
+  isAi?: boolean
   from: 'client' | 'admin'
   text?: string
   attachment?: Attachment
@@ -107,6 +108,7 @@ export type RealtimeMessage = {
   id: string
   client_id: string
   sender_id: string
+  is_ai?: boolean | null
   body: string | null
   sent_at: string
   read_at?: string | null
@@ -252,6 +254,7 @@ export function mapMessage(
     id: row.id,
     clientId: row.client_id,
     senderId: row.sender_id,
+    isAi: row.is_ai === true,
 
     readAt: row.read_at ?? null,
 
@@ -894,6 +897,7 @@ export async function getMessages(
         id,
         client_id,
         sender_id,
+        is_ai,
         body,
         sent_at,
         read_at,
@@ -1024,6 +1028,7 @@ export async function sendMessage(values: {
         id,
         client_id,
         sender_id,
+        is_ai,
         body,
         sent_at,
         read_at,
@@ -1206,6 +1211,7 @@ export async function forwardMessage(
         id,
         client_id,
         sender_id,
+        is_ai,
         body,
         sent_at,
         read_at,

@@ -1022,9 +1022,7 @@ export function ChatView({
         ) : (
           visibleMessages.map(
             (message) => {
-              const mine =
-                message.senderId ===
-                currentUserId
+              const mine = message.isAi ? perspective === 'admin' : message.senderId === currentUserId
 
               const isOpen =
                 openMenuId ===

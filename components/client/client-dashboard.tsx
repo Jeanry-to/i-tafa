@@ -283,11 +283,6 @@ export function ClientDashboard() {
 
   const nav: NavItem[] = baseNav
     .filter((item) => hasShop || !shopOnlyIds.includes(item.id))
-    .map((item) =>
-      item.id === 'messages' && unreadCount > 0
-        ? { ...item, badge: unreadCount }
-        : item,
-    )
 
   // ====================================================
   // CHARGEMENT
