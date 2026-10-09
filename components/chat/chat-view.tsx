@@ -38,8 +38,6 @@ import {
   deleteMessagesForMe,
   editMessage,
   forwardMessage,
-  generateAutoReply,
-  getAgentSettings,
   getMessages,
   markMessagesRead,
   mapMessage,
@@ -92,7 +90,6 @@ export function ChatView({
   const [text, setText] = useState('')
   const [uploading, setUploading] = useState(false)
   const [sending, setSending] = useState(false)
-  const [aiTyping, setAiTyping] = useState(false)
 
   const [openMenuId, setOpenMenuId] =
     useState<string | null>(null)
@@ -385,35 +382,6 @@ export function ChatView({
       })
 
       setReplyingTo(null)
-
-      if (perspective === 'client') {
-        void (async () => {
-          try {
-            const settings =
-              await getAgentSettings()
-
-            if (
-              settings?.autoReplyEnabled
-            ) {
-              setAiTyping(true)
-
-              try {
-                await generateAutoReply(
-                  body,
-                  clientId,
-                )
-              } finally {
-                setAiTyping(false)
-              }
-            }
-          } catch (autoReplyError) {
-            console.error(
-              'Erreur reponse automatique :',
-              autoReplyError,
-            )
-          }
-        })()
-      }
     } catch (error) {
       setText(body)
 
@@ -1492,15 +1460,6 @@ export function ChatView({
           )
         )}
 
-        {aiTyping &&
-          perspective === 'client' && (
-            <div className="flex justify-start">
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-card px-3.5 py-2 text-sm text-muted-foreground shadow-sm">
-                <Loader2 className="size-3.5 animate-spin" />
-                L’IA est en train d’écrire…
-              </div>
-            </div>
-          )}
 
         <div ref={endRef} />
       </div>
