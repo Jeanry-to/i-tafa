@@ -132,8 +132,8 @@ export function AuthScreen() {
           ) : (
             <AuthTabs
               onForgot={() => setMode('forgot')}
-              onEnterClient={() => router.push('/client')}
-              onEnterAdmin={() => router.push('/admin')}
+              onEnterClient={() => router.replace('/client')}
+              onEnterAdmin={() => router.replace('/admin')}
               onRegisterComplete={async () => {
                 await signOut()
                 window.location.href = '/'
