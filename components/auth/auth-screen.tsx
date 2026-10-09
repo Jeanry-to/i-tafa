@@ -78,6 +78,56 @@ export function AuthScreen() {
     )
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const params = new URLSearchParams(
+      window.location.search,
+    )
+
+    if (
+      params.has('suspended') ||
+      params.get('google') === 'register'
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    async function redirectIfSignedIn() {
+      try {
+        const profile = await getCurrentProfile()
+
+        if (!profile || cancelled) return
+
+        if (profile.role === 'admin') {
+          router.replace('/admin')
+          return
+        }
+
+        const client = await getClientForProfile(profile.id)
+
+        if (
+          !client ||
+          cancelled ||
+          isClientPending(client) ||
+          isClientSuspended(client)
+        ) {
+          return
+        }
+
+        router.replace('/client')
+      } catch {
+        // pas de session ou erreur : on garde la page de connexion
+      }
+    }
+
+    void redirectIfSignedIn()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router])
   return (
     <main className="flex min-h-screen flex-col lg:flex-row">
       <PendingStatusNotice />
