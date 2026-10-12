@@ -287,6 +287,7 @@ export function AdminMessages({
               <div className="divide-y">
                 {filteredClients.map((client) => {
                   const isSelected = client.id === selectedClientId
+                  const unreadCount = client.unread ?? 0
 
                   return (
                     <button
@@ -310,6 +311,14 @@ export function AdminMessages({
                             <p className="truncate text-sm font-medium">
                               {client.name}
                             </p>
+
+                            {unreadCount > 0 && (
+                              <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                                {unreadCount > 99
+                                  ? '99+'
+                                  : unreadCount}
+                              </span>
+                            )}
                           </div>
 
                           <p className="truncate text-xs text-muted-foreground">

@@ -186,7 +186,7 @@ function mapClient(row: ClientRow): Client {
     unread: messages.filter(
       (message) =>
         !message.read_at &&
-        message.sender_id !== profile?.id,
+        message.sender_id === profile?.id,
     ).length,
     suspensionReason: row.suspension_reason ?? undefined,
     suspendedAt: row.suspended_at ?? undefined,
