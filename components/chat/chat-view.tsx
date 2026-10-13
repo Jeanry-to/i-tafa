@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import {
   useEffect,
@@ -251,6 +251,26 @@ export function ChatView({
       window.clearTimeout(timer)
     }
   }, [messages])
+
+  useEffect(() => {
+    if (loading) return
+
+    function scrollToBottom() {
+      endRef.current?.scrollIntoView({
+        behavior: 'auto',
+        block: 'end',
+      })
+    }
+
+    scrollToBottom()
+    const timerShort = window.setTimeout(scrollToBottom, 150)
+    const timerLong = window.setTimeout(scrollToBottom, 500)
+
+    return () => {
+      window.clearTimeout(timerShort)
+      window.clearTimeout(timerLong)
+    }
+  }, [clientId, loading])
 
   function buildDisplayMessage(
     savedMessage: ChatMessage,
