@@ -1,8 +1,9 @@
-'use client'
+﻿'use client'
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { translations, resolveLocale, type Locale, type LocalePreference } from './translations'
 import { getAgentSettings, updateAgentLanguage } from '@/lib/services/api'
+import { createClient } from '@/lib/supabase/client'
 
 type LanguageContextType = {
   locale: Locale
@@ -16,20 +17,43 @@ const LanguageContext = createContext<LanguageContextType | null>(null)
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<LocalePreference>('fr')
   const [locale, setLocale] = useState<Locale>('fr')
+  const hasSession = useRef(false)
 
   useEffect(() => {
-    getAgentSettings()
-      .then((settings) => {
+    const supabase = createClient()
+    let cancelled = false
+
+    async function loadLanguage() {
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (!data.session) return
+        hasSession.current = true
+        const settings = await getAgentSettings()
+        if (cancelled) return
         const pref = (settings?.language ?? 'fr') as LocalePreference
         setPreferenceState(pref)
         setLocale(resolveLocale(pref))
-      })
-      .catch((err) => console.error('Erreur chargement langue:', err))
+      } catch (err) {
+        console.error('Erreur chargement langue:', err)
+      }
+    }
+
+    loadLanguage()
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      hasSession.current = !!session
+    })
+
+    return () => {
+      cancelled = true
+      sub.subscription.unsubscribe()
+    }
   }, [])
 
   function setPreference(pref: LocalePreference) {
     setPreferenceState(pref)
     setLocale(resolveLocale(pref))
+    if (!hasSession.current) return
     updateAgentLanguage(pref as any).catch((err) =>
       console.error('Erreur enregistrement langue:', err),
     )
