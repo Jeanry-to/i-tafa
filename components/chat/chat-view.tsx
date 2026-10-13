@@ -554,7 +554,7 @@ export function ChatView({
 
     try {
       await deleteMessageForEveryone(
-        [messageId],
+        messageId,
       )
 
       setMessages((current) =>
