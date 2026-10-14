@@ -3364,10 +3364,46 @@ export async function endLiveSession(
   )
 }
 
-export async function getActiveLiveSession(): Promise<LiveSession | null> {
-  const shopId = await getViewerShopId()
+export async function getViewerShopIds(): Promise<string[]> {
+  const {
+    data: userData,
+    error: userError,
+  } = await supabase.auth.getUser()
 
-  if (!shopId) {
+  if (userError || !userData.user) {
+    return []
+  }
+
+  const userId = userData.user.id
+  const ids: string[] = []
+
+  const { data: ownedShop } = await supabase
+    .from('shops')
+    .select('id')
+    .eq('owner_id', userId)
+    .maybeSingle()
+
+  if (ownedShop?.id) {
+    ids.push(ownedShop.id)
+  }
+
+  const { data: clientRows } = await supabase
+    .from('clients')
+    .select('shop_id')
+    .eq('profile_id', userId)
+
+  for (const row of clientRows ?? []) {
+    if (row.shop_id && !ids.includes(row.shop_id)) {
+      ids.push(row.shop_id)
+    }
+  }
+
+  return ids
+}
+export async function getActiveLiveSession(): Promise<LiveSession | null> {
+  const shopIds = await getViewerShopIds()
+
+  if (shopIds.length === 0) {
     return null
   }
 
@@ -3376,7 +3412,7 @@ export async function getActiveLiveSession(): Promise<LiveSession | null> {
     .select(
       'id, shop_id, host_id, title, status, created_at, ended_at',
     )
-    .eq('shop_id', shopId)
+    .in('shop_id', shopIds)
     .eq('status', 'live')
     .order('created_at', {
       ascending: false,
