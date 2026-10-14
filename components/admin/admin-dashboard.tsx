@@ -205,7 +205,7 @@ export function AdminDashboard() {
 
         {active === 'messages' && (
           <AdminMessages
-            selectedClientId={selectedMessageClientId}
+            externalSelectedClientId={selectedMessageClientId}
             onSelectedClientChange={
               setSelectedMessageClientId
             }

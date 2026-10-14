@@ -396,7 +396,7 @@ function LoginForm({
           type="text"
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
-          placeholder="miora.rakoto@email.mg"
+          placeholder="Saisissez votre e-mail"
           required
         />
       </div>
@@ -420,7 +420,7 @@ function LoginForm({
           id="login-pw"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="********"
+          placeholder=""
           required
         />
       </div>
@@ -585,7 +585,7 @@ function GooglePseudoStep({
           id="google-pseudo"
           value={pseudo}
           onChange={(e) => setPseudo(e.target.value)}
-          placeholder="miora_r"
+          placeholder="Choisissez un pseudo"
           required
         />
       </div>
@@ -688,7 +688,7 @@ function RegisterInfo({
           onChange={(e) =>
             setFullName(e.target.value)
           }
-          placeholder="Miora Rakoto"
+          placeholder="Saisissez votre nom complet"
           required
         />
       </div>
@@ -704,7 +704,7 @@ function RegisterInfo({
           onChange={(e) =>
             setPseudo(e.target.value)
           }
-          placeholder="miora_r"
+          placeholder="Choisissez un pseudo"
           required
         />
       </div>
@@ -721,7 +721,7 @@ function RegisterInfo({
           onChange={(e) =>
             setEmail(e.target.value)
           }
-          placeholder="vous@email.mg"
+          placeholder="Saisissez votre adresse e-mail"
           required
         />
       </div>
@@ -737,7 +737,7 @@ function RegisterInfo({
           onChange={(e) =>
             setPassword(e.target.value)
           }
-          placeholder="Choisissez un mot de passe"
+          placeholder="8 caractères minimum"
           required
         />
       </div>
@@ -753,7 +753,7 @@ function RegisterInfo({
           onChange={(e) =>
             setConfirmPassword(e.target.value)
           }
-          placeholder="Confirmez le mot de passe"
+          placeholder="Répétez votre mot de passe"
           required
         />
       </div>
@@ -974,7 +974,7 @@ function PaymentStep({
             onChange={(e) =>
               setReference(e.target.value)
             }
-            placeholder="Ex. : MVL7X4K29B"
+            placeholder="Saisissez la référence du paiement"
             required
           />
         </div>
@@ -1175,7 +1175,7 @@ function ForgotPassword({
               onChange={(e) =>
                 setEmail(e.target.value)
               }
-              placeholder="vous@email.mg"
+              placeholder="Saisissez votre adresse e-mail"
               autoComplete="email"
               required
             />

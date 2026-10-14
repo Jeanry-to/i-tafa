@@ -104,7 +104,7 @@ export function ClientManagement({
       const clientsWithStatus = await Promise.all(
         data.map(async (client) => {
           try {
-            const suspended = await isClientSuspended(client.id)
+            const suspended = await isClientSuspended(client)
 
             return {
               ...client,
@@ -236,7 +236,7 @@ export function ClientManagement({
       setSaving(true)
 
       await suspendClient(selected.id, {
-        reason: reason.trim() || null,
+        reason: reason.trim() || 'Non précisée',
         until: until || null,
       })
 
@@ -825,7 +825,7 @@ export function ClientManagement({
 
                     <dd className="text-right font-medium">
                       {formatDate(
-                        profileClient.created_at,
+                        profileClient.joinedAt,
                       )}
                     </dd>
                   </div>

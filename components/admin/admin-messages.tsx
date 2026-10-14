@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ChatView } from '@/components/chat/chat-view'
+import { supabase } from '@/lib/supabase'
 
 import {
   getClients,
@@ -82,6 +83,44 @@ export function AdminMessages({
       mounted = false
     }
   }, [])
+
+  // Compteur de messages non lus : +1 a chaque nouveau message d'un client
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-unread-counter')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          const row = payload.new as {
+            client_id: string
+            sender_id: string | null
+            read_at: string | null
+          }
+
+          if (row.read_at) return
+          if (row.client_id === selectedClientId) return
+
+          setClients((currentClients) =>
+            currentClients.map((item) =>
+              item.id === row.client_id &&
+              item.profileId === row.sender_id
+                ? { ...item, unread: item.unread + 1 }
+                : item,
+            ),
+          )
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [selectedClientId])
 
   useEffect(() => {
     if (externalSelectedClientId !== undefined) {
