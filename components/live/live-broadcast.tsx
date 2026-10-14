@@ -178,6 +178,18 @@ export function LiveBroadcast({
     setLive(false)
   }
 
+  useEffect(() => {
+    if (!live) return
+
+    const video = videoRef.current
+    const stream = streamRef.current
+
+    if (video && stream && video.srcObject !== stream) {
+      video.srcObject = stream
+      video.muted = true
+      video.play().catch(() => undefined)
+    }
+  }, [live])
   async function startLive() {
     if (!title.trim()) {
       toast.error('Titre requis', {
@@ -347,7 +359,7 @@ export function LiveBroadcast({
       )
 
       const status =
-        await channel.subscribe()
+        await new Promise<string>((resolve) => { channel.subscribe((s: string) => resolve(s)) })
 
       if (status !== 'SUBSCRIBED') {
         throw new Error(

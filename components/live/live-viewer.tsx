@@ -334,7 +334,7 @@ export function LiveViewer({
           },
         )
 
-       const status = await channel.subscribe()
+       const status = await new Promise<string>((resolve) => { channel.subscribe((s: string) => resolve(s)) })
 
 console.log('Statut Realtime Live viewer :', status)
 
