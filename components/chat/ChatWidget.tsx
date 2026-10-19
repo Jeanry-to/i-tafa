@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import { useLanguage } from '@/lib/i18n/language-context'
+import { supabase } from '@/lib/supabase'
 import {
   getClientForProfile,
   getCurrentProfile,
@@ -341,8 +342,22 @@ export default function ChatWidget() {
         formData.append('files', file)
       }
 
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.access_token) {
+        throw new Error(
+          'Votre session a expiré. Veuillez vous reconnecter.',
+        )
+      }
+
       const response = await fetch('/api/agent', {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: formData,
       })
 

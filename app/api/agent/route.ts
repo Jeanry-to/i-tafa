@@ -40,6 +40,7 @@ const MAX_HISTORY_TOTAL_CHARS = 6000
 const MAX_BUSINESS_CHARS = 2500
 const MAX_PRODUCTS_CHARS = 6000
 const MAX_KNOWLEDGE_CHARS = 5000
+const PLATFORM_SHOP_ID = 'a6dfb3e1-9d15-4312-9721-6b0e0f14e4c1'
 const MAX_FAQS_CHARS = 4000
 const MAX_FILES_TOTAL_CHARS = 12000
 const MAX_FILE_CHARS = 5000
@@ -59,6 +60,23 @@ const supabase =
     : null
 
 // ======================================================
+// Client réservé à la vérification des sessions utilisateur.
+const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+
+const supabaseAuth =
+  SUPABASE_URL && SUPABASE_ANON_KEY
+    ? createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+        {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        },
+      )
+    : null
 // TYPES
 // ======================================================
 
@@ -89,6 +107,7 @@ type ShopData = {
   business: Record<string, unknown>
   products: Record<string, unknown>[]
   knowledge: Record<string, unknown>[]
+  platformKnowledge: Record<string, unknown>[]
   faqs: Record<string, unknown>[]
   settings: AgentSettings
 }
@@ -648,6 +667,27 @@ export async function getShopData(
     )
   }
 
+  // Informations officielles de la plateforme (boutique Bibliotheque)
+  let platformKnowledge: Record<string, unknown>[] = []
+
+  if (shopId !== PLATFORM_SHOP_ID) {
+    const platformResult = await supabase
+      .from('knowledge_base')
+      .select('category,title,content')
+      .eq('shop_id', PLATFORM_SHOP_ID)
+      .limit(50)
+
+    if (platformResult.error) {
+      console.error(
+        'Erreur knowledge_base plateforme:',
+        platformResult.error.message,
+      )
+    } else {
+      platformKnowledge = (platformResult.data ||
+        []) as Record<string, unknown>[]
+    }
+  }
+
   return {
     shopId,
     ownerId:
@@ -684,6 +724,8 @@ export async function getShopData(
     settings:
       (settingsResult.data ||
         {}) as AgentSettings,
+
+    platformKnowledge,
   }
 }
 
@@ -950,6 +992,12 @@ BASE DE CONNAISSANCES:
 ${formatKnowledge(
   shopData.knowledge,
 ) || 'Aucune information.'}
+
+INFORMATIONS OFFICIELLES DE LA PLATEFORME I-TAFA:
+${formatKnowledge(
+  shopData.platformKnowledge,
+) || 'Aucune information.'}
+(Utilise ces informations pour repondre aux questions sur i-tafa : son createur, son fonctionnement, ses regles, ses abonnements. Ne les confonds pas avec les produits de la boutique.)
 
 FAQ:
 ${formatFaqs(
@@ -1381,6 +1429,107 @@ export async function POST(
     }
 
     // --------------------------------------------------
+    // --------------------------------------------------
+    // AUTHENTIFICATION ET AUTORISATION
+    // --------------------------------------------------
+
+    const authorizationHeader =
+      request.headers.get('authorization') || ''
+
+    const tokenMatch =
+      authorizationHeader.match(/^Bearer\s+(.+)$/i)
+
+    const accessToken =
+      tokenMatch?.[1]?.trim() || ''
+
+    if (!supabaseAuth || !accessToken) {
+      return jsonError(
+        'Connexion requise. Veuillez vous reconnecter.',
+        401,
+      )
+    }
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(accessToken)
+
+    if (authError || !user) {
+      return jsonError(
+        'Session invalide ou expirée. Veuillez vous reconnecter.',
+        401,
+      )
+    }
+
+    const {
+      data: requestedClient,
+      error: requestedClientError,
+    } = await supabase
+      .from('clients')
+      .select('id, profile_id, shop_id')
+      .eq('id', clientId)
+      .maybeSingle()
+
+    if (requestedClientError) {
+      console.error(
+        '[AGENT] Erreur de vérification du client :',
+        requestedClientError.message,
+      )
+      return jsonError(
+        'Impossible de vérifier les droits du compte.',
+        500,
+      )
+    }
+
+    if (!requestedClient || !requestedClient.shop_id) {
+      return jsonError(
+        'Client ou boutique introuvable.',
+        404,
+      )
+    }
+
+    const {
+      data: requestedShop,
+      error: requestedShopError,
+    } = await supabase
+      .from('shops')
+      .select('id, owner_id')
+      .eq('id', requestedClient.shop_id)
+      .maybeSingle()
+
+    if (requestedShopError) {
+      console.error(
+        '[AGENT] Erreur de vérification de la boutique :',
+        requestedShopError.message,
+      )
+      return jsonError(
+        'Impossible de vérifier les droits de la boutique.',
+        500,
+      )
+    }
+
+    if (!requestedShop) {
+      return jsonError(
+        'Boutique introuvable.',
+        404,
+      )
+    }
+
+    const isRequestedClient =
+      requestedClient.profile_id === user.id
+
+    const isShopOwner =
+      requestedShop.owner_id === user.id
+
+    if (!isRequestedClient && !isShopOwner) {
+      console.warn(
+        '[AGENT] Accès refusé : utilisateur non autorisé.',
+      )
+      return jsonError(
+        'Vous n’êtes pas autorisé à accéder à ce client.',
+        403,
+      )
+    }
     // VERIFICATION SUSPENSION
     // IMPORTANT :
     // Cette vérification est faite AVANT getShopData()

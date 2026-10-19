@@ -3175,21 +3175,36 @@ export async function generateAutoReply(
   message: string,
   clientId: string,
 ) {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession()
+
+  if (sessionError || !session?.access_token) {
+    throw new Error(
+      'Votre session a expiré. Veuillez vous reconnecter.',
+    )
+  }
+
   const response = await fetch('/api/agent', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
     body: JSON.stringify({ message, clientId }),
   })
 
   const data = await response.json()
 
   if (!response.ok || !data?.reply) {
-    throw new Error(data?.error ?? 'Reponse IA indisponible.')
+    throw new Error(
+      data?.error ?? 'Réponse IA indisponible.',
+    )
   }
 
   return data.reply
 }
-
 export async function submitPaymentReference(
   clientId: string,
   values: {
