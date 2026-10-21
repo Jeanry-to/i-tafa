@@ -194,8 +194,18 @@ export default function ChatWidget() {
 
     loadClient()
 
+    const { data: authListener } =
+      supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+          setTimeout(() => {
+            void loadClient()
+          }, 0)
+        }
+      })
+
     return () => {
       mounted = false
+      authListener.subscription.unsubscribe()
     }
   }, [])
 
