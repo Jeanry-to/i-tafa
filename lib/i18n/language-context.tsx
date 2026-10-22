@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { translations, resolveLocale, type Locale, type LocalePreference } from './translations'
-import { getAgentSettings, updateAgentLanguage } from '@/lib/services/api'
+import { getAgentSettings, ownsShop, updateAgentLanguage } from '@/lib/services/api'
 import { createClient } from '@/lib/supabase/client'
 
 type LanguageContextType = {
@@ -28,6 +28,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         const { data } = await supabase.auth.getSession()
         if (!data.session) return
         hasSession.current = true
+        // Pas de boutique (acheteur) : aucune langue a charger
+        if (!(await ownsShop())) return
         const settings = await getAgentSettings()
         if (cancelled) return
         const pref = (settings?.language ?? 'fr') as LocalePreference
