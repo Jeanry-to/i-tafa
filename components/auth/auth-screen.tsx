@@ -600,6 +600,7 @@ function GooglePseudoStep({
   )
 }
 
+
 function RegisterInfo({
   onNext,
 }: {
@@ -611,20 +612,30 @@ function RegisterInfo({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [marketingConsent, setMarketingConsent] = useState(false)
+  const [consentError, setConsentError] = useState('')
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
 
-    if (password !== confirmPassword) {
-      toast.error(
-        'Les mots de passe ne correspondent pas',
+    if (!acceptedTerms) {
+      setConsentError(
+        'Vous devez accepter les Conditions d’utilisation et la Politique de confidentialité.',
       )
+      return
+    }
+
+    setConsentError('')
+
+    if (password !== confirmPassword) {
+      toast.error('Les mots de passe ne correspondent pas.')
       return
     }
 
     if (password.length < 6) {
       toast.error(
-        'Le mot de passe doit contenir au moins 6 caracteres',
+        'Le mot de passe doit contenir au moins 6 caractères.',
       )
       return
     }
@@ -633,13 +644,13 @@ function RegisterInfo({
 
     try {
       await signUp(
-        email,
+        email.trim(),
         password,
-        fullName,
-        pseudo,
+        fullName.trim(),
+        pseudo.trim(),
       )
 
-      toast.success('Compte cree', {
+      toast.success('Compte créé', {
         description: 'Passons maintenant au paiement.',
       })
 
@@ -649,7 +660,7 @@ function RegisterInfo({
         description:
           error instanceof Error
             ? error.message
-            : 'Reessayez.',
+            : 'Veuillez réessayer.',
       })
     } finally {
       setLoading(false)
@@ -664,12 +675,23 @@ function RegisterInfo({
       <GoogleButton
         label="S'inscrire avec Google"
         onClick={async () => {
+          if (!acceptedTerms) {
+            setConsentError(
+              'Vous devez accepter les Conditions d’utilisation et la Politique de confidentialité avant de continuer.',
+            )
+            return
+          }
+
+          setConsentError('')
+
           try {
             await signInWithGoogle('/client')
           } catch (error) {
             toast.error('Inscription Google impossible', {
               description:
-                error instanceof Error ? error.message : 'Veuillez réessayer.',
+                error instanceof Error
+                  ? error.message
+                  : 'Veuillez réessayer.',
             })
           }
         }}
@@ -678,65 +700,48 @@ function RegisterInfo({
       <Divider />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-name">
-          Nom complet
-        </Label>
-
+        <Label htmlFor="reg-name">Nom complet</Label>
         <Input
           id="reg-name"
           value={fullName}
-          onChange={(e) =>
-            setFullName(e.target.value)
-          }
+          onChange={(e) => setFullName(e.target.value)}
           placeholder="Miora Rakoto"
+          autoComplete="name"
           required
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-pseudo">
-          Pseudo
-        </Label>
-
+        <Label htmlFor="reg-pseudo">Pseudo</Label>
         <Input
           id="reg-pseudo"
           value={pseudo}
-          onChange={(e) =>
-            setPseudo(e.target.value)
-          }
+          onChange={(e) => setPseudo(e.target.value)}
           placeholder="miora_r"
+          autoComplete="username"
           required
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-email">
-          Adresse e-mail
-        </Label>
-
+        <Label htmlFor="reg-email">Adresse e-mail</Label>
         <Input
           id="reg-email"
           type="email"
           value={email}
-          onChange={(e) =>
-            setEmail(e.target.value)
-          }
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="vous@email.mg"
+          autoComplete="email"
           required
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-pw">
-          Mot de passe
-        </Label>
-
+        <Label htmlFor="reg-pw">Mot de passe</Label>
         <PasswordInput
           id="reg-pw"
           value={password}
-          onChange={(e) =>
-            setPassword(e.target.value)
-          }
+          onChange={(e) => setPassword(e.target.value)}
           placeholder="Choisissez un mot de passe"
           required
         />
@@ -746,16 +751,73 @@ function RegisterInfo({
         <Label htmlFor="reg-pw-confirm">
           Confirmer le mot de passe
         </Label>
-
         <PasswordInput
           id="reg-pw-confirm"
           value={confirmPassword}
-          onChange={(e) =>
-            setConfirmPassword(e.target.value)
-          }
+          onChange={(e) => setConfirmPassword(e.target.value)}
           placeholder="Confirmez le mot de passe"
           required
         />
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border p-4 text-sm">
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={acceptedTerms}
+            onChange={(e) => {
+              setAcceptedTerms(e.target.checked)
+              setConsentError('')
+            }}
+            required
+            className="mt-1"
+          />
+          <span>
+            J’accepte les{' '}
+            <a
+              href="/conditions-utilisation"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline"
+            >
+              Conditions d’utilisation
+            </a>
+            {' '}et la{' '}
+            <a
+              href="/politique-confidentialite"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline"
+            >
+              Politique de confidentialité
+            </a>
+            .
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={marketingConsent}
+            onChange={(e) =>
+              setMarketingConsent(e.target.checked)
+            }
+            className="mt-1"
+          />
+          <span>
+            J’accepte de recevoir les actualités et offres commerciales
+            d’i-tafa (facultatif).
+          </span>
+        </label>
+
+        {consentError && (
+          <p
+            className="text-sm text-destructive"
+            role="alert"
+          >
+            {consentError}
+          </p>
+        )}
       </div>
 
       <Button
@@ -769,7 +831,6 @@ function RegisterInfo({
             aria-hidden="true"
           />
         )}
-
         Continuer vers le paiement
       </Button>
     </form>
