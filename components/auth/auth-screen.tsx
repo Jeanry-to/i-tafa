@@ -37,11 +37,13 @@ import {
   getActivePaymentMethods,
   isClientPending,
   submitPaymentReference,
+  ownsShop,
   type PaymentMethod,
 } from '@/lib/services/api'
 import { playBip } from '@/lib/beep'
 
 type Mode = 'auth' | 'forgot'
+type AccountType = 'seller' | 'buyer'
 
 const features = [
   {
@@ -107,12 +109,17 @@ export function AuthScreen() {
 
         const client = await getClientForProfile(profile.id)
 
-        if (
-          !client ||
-          cancelled ||
-          isClientPending(client) ||
-          isClientSuspended(client)
-        ) {
+        if (cancelled) return
+
+        if (!client) {
+          // Compte sans ligne client : acheteur s'il ne possede pas de boutique
+          if (!(await ownsShop()) && !cancelled) {
+            router.replace('/marketplace')
+          }
+          return
+        }
+
+        if (isClientPending(client) || isClientSuspended(client)) {
           return
         }
 
@@ -341,6 +348,12 @@ function LoginForm({
               (until ? 'Fin prevue : ' + until : 'Sans date de fin.'),
           )
 
+          return
+        }
+
+        if (!client && !(await ownsShop())) {
+          toast.success('Connexion reussie')
+          window.location.href = '/marketplace'
           return
         }
 
@@ -615,6 +628,7 @@ function RegisterInfo({
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [marketingConsent, setMarketingConsent] = useState(false)
   const [consentError, setConsentError] = useState('')
+  const [accountType, setAccountType] = useState<AccountType>('seller')
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -648,7 +662,17 @@ function RegisterInfo({
         password,
         fullName.trim(),
         pseudo.trim(),
+        accountType,
       )
+
+      if (accountType === 'buyer') {
+        toast.success('Compte créé', {
+          description: 'Bienvenue sur la marketplace.',
+        })
+
+        window.location.href = '/marketplace'
+        return
+      }
 
       toast.success('Compte créé', {
         description: 'Passons maintenant au paiement.',
@@ -672,32 +696,89 @@ function RegisterInfo({
       onSubmit={submit}
       className="flex flex-col gap-4"
     >
-      <GoogleButton
-        label="S'inscrire avec Google"
-        onClick={async () => {
-          if (!acceptedTerms) {
-            setConsentError(
-              'Vous devez accepter les Conditions d’utilisation et la Politique de confidentialité avant de continuer.',
-            )
-            return
-          }
+      <div className="flex flex-col gap-2">
+        <Label>Je m&apos;inscris comme</Label>
 
-          setConsentError('')
+        <div
+          className="grid grid-cols-2 gap-2"
+          role="radiogroup"
+          aria-label="Type de compte"
+        >
+          {(
+            [
+              {
+                value: 'seller',
+                label: 'Vendeur',
+                text: 'Je crée et gère ma boutique.',
+              },
+              {
+                value: 'buyer',
+                label: 'Client acheteur',
+                text: 'Je découvre les boutiques et contacte les vendeurs.',
+              },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={accountType === option.value}
+              onClick={() => setAccountType(option.value)}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                accountType === option.value
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border bg-card hover:bg-muted'
+              }`}
+            >
+              <span className="block text-sm font-semibold">
+                {option.label}
+              </span>
 
-          try {
-            await signInWithGoogle('/client')
-          } catch (error) {
-            toast.error('Inscription Google impossible', {
-              description:
-                error instanceof Error
-                  ? error.message
-                  : 'Veuillez réessayer.',
-            })
-          }
-        }}
-      />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {option.text}
+              </span>
+            </button>
+          ))}
+        </div>
 
-      <Divider />
+        {accountType === 'buyer' && (
+          <p className="text-xs text-muted-foreground">
+            Pas de paiement à l&apos;inscription. L&apos;inscription avec
+            Google n&apos;est pas encore disponible pour les acheteurs.
+          </p>
+        )}
+      </div>
+
+      {accountType === 'seller' && (
+        <>
+          <GoogleButton
+            label="S'inscrire avec Google"
+            onClick={async () => {
+              if (!acceptedTerms) {
+                setConsentError(
+                  'Vous devez accepter les Conditions d’utilisation et la Politique de confidentialité avant de continuer.',
+                )
+                return
+              }
+
+              setConsentError('')
+
+              try {
+                await signInWithGoogle('/client')
+              } catch (error) {
+                toast.error('Inscription Google impossible', {
+                  description:
+                    error instanceof Error
+                      ? error.message
+                      : 'Veuillez réessayer.',
+                })
+              }
+            }}
+          />
+
+          <Divider />
+        </>
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="reg-name">Nom complet</Label>
@@ -831,7 +912,9 @@ function RegisterInfo({
             aria-hidden="true"
           />
         )}
-        Continuer vers le paiement
+        {accountType === 'buyer'
+          ? 'Créer mon compte'
+          : 'Continuer vers le paiement'}
       </Button>
     </form>
   )

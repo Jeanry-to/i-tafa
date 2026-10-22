@@ -339,6 +339,7 @@ export async function signUp(
   password: string,
   fullName: string,
   pseudo: string,
+  accountType: 'seller' | 'buyer' = 'seller',
 ) {
   const result = throwIfError(
     await supabase.auth.signUp({
@@ -382,7 +383,7 @@ export async function signUp(
       )
     }
 
-      if (!existingClient) {
+      if (!existingClient && accountType === 'seller') {
         const shopSlug = `${pseudo}-${Date.now().toString(36)}`
 
         const { data: newShop, error: shopInsertError } = await supabase
