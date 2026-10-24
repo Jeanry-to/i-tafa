@@ -33,6 +33,26 @@ function formatPrice(product: MarketplaceProduct) {
   )
 }
 
+function whatsappLink(phone: string) {
+  const digits = phone.replace(/\D/g, '')
+
+  if (digits.length < 9) {
+    return null
+  }
+
+  let international = digits
+
+  if (digits.startsWith('00')) {
+    international = digits.slice(2)
+  } else if (digits.startsWith('0')) {
+    international = '261' + digits.slice(1)
+  } else if (digits.length === 9) {
+    international = '261' + digits
+  }
+
+  return 'https://wa.me/' + international
+}
+
 export default function MarketplacePage() {
   const [loading, setLoading] = useState(true)
   const [signedIn, setSignedIn] = useState(false)
@@ -177,38 +197,64 @@ export default function MarketplacePage() {
             </p>
           ) : (
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((product) => (
-                <article
-                  key={product.id}
-                  className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge>{product.shopName}</Badge>
+              {filtered.map((product) => {
+                const contactLink = product.shopPhone
+                  ? whatsappLink(product.shopPhone)
+                  : null
 
-                    {product.promotion ? (
-                      <Badge>{product.promotion}</Badge>
-                    ) : null}
+                return (
+                  <article
+                    key={product.id}
+                    className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge>{product.shopName}</Badge>
 
-                    {product.discount ? (
-                      <Badge>{product.discount}</Badge>
-                    ) : null}
-                  </div>
+                      {product.promotion ? (
+                        <Badge>{product.promotion}</Badge>
+                      ) : null}
 
-                  <h2 className="font-display text-lg font-semibold">
-                    {product.name}
-                  </h2>
+                      {product.discount ? (
+                        <Badge>{product.discount}</Badge>
+                      ) : null}
+                    </div>
 
-                  <p className="text-sm font-medium">
-                    {formatPrice(product)}
-                  </p>
+                    <h2 className="font-display text-lg font-semibold">
+                      {product.name}
+                    </h2>
 
-                  {product.description ? (
-                    <p className="line-clamp-3 text-sm text-muted-foreground">
-                      {product.description}
+                    <p className="text-sm font-medium">
+                      {formatPrice(product)}
                     </p>
-                  ) : null}
-                </article>
-              ))}
+
+                    {product.description ? (
+                      <p className="line-clamp-3 text-sm text-muted-foreground">
+                        {product.description}
+                      </p>
+                    ) : null}
+
+                    {contactLink ? (
+                      <Button
+                        variant="outline"
+                        className="mt-auto"
+                        onClick={() =>
+                          window.open(
+                            contactLink,
+                            '_blank',
+                            'noopener,noreferrer',
+                          )
+                        }
+                      >
+                        Contacter sur WhatsApp
+                      </Button>
+                    ) : (
+                      <p className="mt-auto text-xs text-muted-foreground">
+                        Contact non renseigné
+                      </p>
+                    )}
+                  </article>
+                )
+              })}
             </div>
           )}
         </>

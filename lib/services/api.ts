@@ -2266,6 +2266,7 @@ export type MarketplaceProduct = {
   shopId: string
   shopName: string
   shopSlug: string
+  shopPhone: string
   name: string
   description: string
   price: number | null
@@ -2283,6 +2284,7 @@ type MarketplaceProductRow = {
   shop_id: string
   shop_name: string
   shop_slug: string | null
+  shop_phone: string | null
   name: string
   description: string | null
   price: number | null
@@ -2311,6 +2313,7 @@ export async function getMarketplaceProducts() {
       shopId: row.shop_id,
       shopName: row.shop_name,
       shopSlug: row.shop_slug ?? '',
+      shopPhone: row.shop_phone ?? '',
       name: row.name,
       description:
         row.description ?? '',
