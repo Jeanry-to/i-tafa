@@ -219,7 +219,7 @@ export default function ConditionsUtilisationPage() {
             des litiges doivent être complétés et vérifiés avant publication.
           </p>
           <p className="mt-2">
-            Contact : ajoutez ici l’adresse officielle de contact d’i-tafa.
+            Contact : <a href="mailto:jeanrinaht@gmail.com" className="text-purple-700 underline">jeanrinaht@gmail.com</a>.
           </p>
         </section>
       </div>

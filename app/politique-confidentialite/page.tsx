@@ -105,10 +105,7 @@ export default function PolitiqueConfidentialitePage() {
         <section>
           <h2 className="mb-2 text-xl font-semibold">6. Hébergement et transferts</h2>
           <p>
-            Les données peuvent être hébergées ou traitées par les fournisseurs
-            techniques utilisés par i-tafa. Les pays d’hébergement, les éventuels
-            transferts internationaux et les garanties associées doivent être
-            identifiés et vérifiés avant publication.
+            Les donn&eacute;es sont h&eacute;berg&eacute;es ou trait&eacute;es par des fournisseurs techniques utilis&eacute;s par i-tafa, notamment Supabase (base de donn&eacute;es et connexion), Vercel (h&eacute;bergement de l&rsquo;application), Groq (Agent IA) et Google (connexion avec Google). Certains de ces fournisseurs peuvent traiter les donn&eacute;es en dehors de votre pays de r&eacute;sidence, notamment aux &Eacute;tats-Unis. Les garanties associ&eacute;es &agrave; ces transferts doivent &ecirc;tre v&eacute;rifi&eacute;es avant publication.
           </p>
         </section>
 
