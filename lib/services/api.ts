@@ -339,6 +339,7 @@ export async function signUp(
   password: string,
   fullName: string,
   pseudo: string,
+  accountType: 'seller' | 'buyer' = 'seller',
 ) {
   const result = throwIfError(
     await supabase.auth.signUp({
@@ -382,7 +383,7 @@ export async function signUp(
       )
     }
 
-      if (!existingClient) {
+      if (!existingClient && accountType === 'seller') {
         const shopSlug = `${pseudo}-${Date.now().toString(36)}`
 
         const { data: newShop, error: shopInsertError } = await supabase
@@ -2260,6 +2261,81 @@ export async function deleteProduct(
       .eq('id', id),
   )
 }
+export type MarketplaceProduct = {
+  id: string
+  shopId: string
+  shopName: string
+  shopSlug: string
+  shopPhone: string
+  name: string
+  description: string
+  price: number | null
+  currency: string
+  features: string
+  conditions: string
+  promotion: string
+  discount: string
+  orderConditions: string
+  deliveryConditions: string
+}
+
+type MarketplaceProductRow = {
+  id: string
+  shop_id: string
+  shop_name: string
+  shop_slug: string | null
+  shop_phone: string | null
+  name: string
+  description: string | null
+  price: number | null
+  currency: string | null
+  features: string | null
+  conditions: string | null
+  promotion: string | null
+  discount: string | null
+  order_conditions: string | null
+  delivery_conditions: string | null
+}
+
+export async function getMarketplaceProducts() {
+  const data = throwIfError(
+    await supabase
+      .from('marketplace_products')
+      .select('*')
+      .order('created_at', {
+        ascending: false,
+      }),
+  ) as MarketplaceProductRow[]
+
+  return data.map(
+    (row): MarketplaceProduct => ({
+      id: row.id,
+      shopId: row.shop_id,
+      shopName: row.shop_name,
+      shopSlug: row.shop_slug ?? '',
+      shopPhone: row.shop_phone ?? '',
+      name: row.name,
+      description:
+        row.description ?? '',
+      price: row.price,
+      currency:
+        row.currency ?? 'MGA',
+      features:
+        row.features ?? '',
+      conditions:
+        row.conditions ?? '',
+      promotion:
+        row.promotion ?? '',
+      discount:
+        row.discount ?? '',
+      orderConditions:
+        row.order_conditions ?? '',
+      deliveryConditions:
+        row.delivery_conditions ?? '',
+    }),
+  )
+}
+
 
 export type KnowledgeItem = {
   id: string

@@ -37,11 +37,13 @@ import {
   getActivePaymentMethods,
   isClientPending,
   submitPaymentReference,
+  ownsShop,
   type PaymentMethod,
 } from '@/lib/services/api'
 import { playBip } from '@/lib/beep'
 
 type Mode = 'auth' | 'forgot'
+type AccountType = 'seller' | 'buyer'
 
 const features = [
   {
@@ -107,12 +109,17 @@ export function AuthScreen() {
 
         const client = await getClientForProfile(profile.id)
 
-        if (
-          !client ||
-          cancelled ||
-          isClientPending(client) ||
-          isClientSuspended(client)
-        ) {
+        if (cancelled) return
+
+        if (!client) {
+          // Compte sans ligne client : acheteur s'il ne possede pas de boutique
+          if (!(await ownsShop()) && !cancelled) {
+            router.replace('/marketplace')
+          }
+          return
+        }
+
+        if (isClientPending(client) || isClientSuspended(client)) {
           return
         }
 
@@ -341,6 +348,12 @@ function LoginForm({
               (until ? 'Fin prevue : ' + until : 'Sans date de fin.'),
           )
 
+          return
+        }
+
+        if (!client && !(await ownsShop())) {
+          toast.success('Connexion reussie')
+          window.location.href = '/marketplace'
           return
         }
 
@@ -600,6 +613,7 @@ function GooglePseudoStep({
   )
 }
 
+
 function RegisterInfo({
   onNext,
 }: {
@@ -611,20 +625,31 @@ function RegisterInfo({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [marketingConsent, setMarketingConsent] = useState(false)
+  const [consentError, setConsentError] = useState('')
+  const [accountType, setAccountType] = useState<AccountType>('seller')
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
 
-    if (password !== confirmPassword) {
-      toast.error(
-        'Les mots de passe ne correspondent pas',
+    if (!acceptedTerms) {
+      setConsentError(
+        'Vous devez accepter les Conditions d’utilisation et la Politique de confidentialité.',
       )
+      return
+    }
+
+    setConsentError('')
+
+    if (password !== confirmPassword) {
+      toast.error('Les mots de passe ne correspondent pas.')
       return
     }
 
     if (password.length < 6) {
       toast.error(
-        'Le mot de passe doit contenir au moins 6 caracteres',
+        'Le mot de passe doit contenir au moins 6 caractères.',
       )
       return
     }
@@ -633,13 +658,23 @@ function RegisterInfo({
 
     try {
       await signUp(
-        email,
+        email.trim(),
         password,
-        fullName,
-        pseudo,
+        fullName.trim(),
+        pseudo.trim(),
+        accountType,
       )
 
-      toast.success('Compte cree', {
+      if (accountType === 'buyer') {
+        toast.success('Compte créé', {
+          description: 'Bienvenue sur la marketplace.',
+        })
+
+        window.location.href = '/marketplace'
+        return
+      }
+
+      toast.success('Compte créé', {
         description: 'Passons maintenant au paiement.',
       })
 
@@ -649,7 +684,7 @@ function RegisterInfo({
         description:
           error instanceof Error
             ? error.message
-            : 'Reessayez.',
+            : 'Veuillez réessayer.',
       })
     } finally {
       setLoading(false)
@@ -661,82 +696,133 @@ function RegisterInfo({
       onSubmit={submit}
       className="flex flex-col gap-4"
     >
-      <GoogleButton
-        label="S'inscrire avec Google"
-        onClick={async () => {
-          try {
-            await signInWithGoogle('/client')
-          } catch (error) {
-            toast.error('Inscription Google impossible', {
-              description:
-                error instanceof Error ? error.message : 'Veuillez réessayer.',
-            })
-          }
-        }}
-      />
+      <div className="flex flex-col gap-2">
+        <Label>Je m&apos;inscris comme</Label>
 
-      <Divider />
+        <div
+          className="grid grid-cols-2 gap-2"
+          role="radiogroup"
+          aria-label="Type de compte"
+        >
+          {(
+            [
+              {
+                value: 'seller',
+                label: 'Vendeur',
+                text: 'Je crée et gère ma boutique.',
+              },
+              {
+                value: 'buyer',
+                label: 'Client acheteur',
+                text: 'Je découvre les boutiques et contacte les vendeurs.',
+              },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={accountType === option.value}
+              onClick={() => setAccountType(option.value)}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                accountType === option.value
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border bg-card hover:bg-muted'
+              }`}
+            >
+              <span className="block text-sm font-semibold">
+                {option.label}
+              </span>
+
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {option.text}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {accountType === 'buyer' && (
+          <p className="text-xs text-muted-foreground">
+            Pas de paiement à l&apos;inscription. L&apos;inscription avec
+            Google n&apos;est pas encore disponible pour les acheteurs.
+          </p>
+        )}
+      </div>
+
+      {accountType === 'seller' && (
+        <>
+          <GoogleButton
+            label="S'inscrire avec Google"
+            onClick={async () => {
+              if (!acceptedTerms) {
+                setConsentError(
+                  'Vous devez accepter les Conditions d’utilisation et la Politique de confidentialité avant de continuer.',
+                )
+                return
+              }
+
+              setConsentError('')
+
+              try {
+                await signInWithGoogle('/client')
+              } catch (error) {
+                toast.error('Inscription Google impossible', {
+                  description:
+                    error instanceof Error
+                      ? error.message
+                      : 'Veuillez réessayer.',
+                })
+              }
+            }}
+          />
+
+          <Divider />
+        </>
+      )}
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-name">
-          Nom complet
-        </Label>
-
+        <Label htmlFor="reg-name">Nom complet</Label>
         <Input
           id="reg-name"
           value={fullName}
-          onChange={(e) =>
-            setFullName(e.target.value)
-          }
+          onChange={(e) => setFullName(e.target.value)}
           placeholder="Miora Rakoto"
+          autoComplete="name"
           required
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-pseudo">
-          Pseudo
-        </Label>
-
+        <Label htmlFor="reg-pseudo">Pseudo</Label>
         <Input
           id="reg-pseudo"
           value={pseudo}
-          onChange={(e) =>
-            setPseudo(e.target.value)
-          }
+          onChange={(e) => setPseudo(e.target.value)}
           placeholder="miora_r"
+          autoComplete="username"
           required
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-email">
-          Adresse e-mail
-        </Label>
-
+        <Label htmlFor="reg-email">Adresse e-mail</Label>
         <Input
           id="reg-email"
           type="email"
           value={email}
-          onChange={(e) =>
-            setEmail(e.target.value)
-          }
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="vous@email.mg"
+          autoComplete="email"
           required
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="reg-pw">
-          Mot de passe
-        </Label>
-
+        <Label htmlFor="reg-pw">Mot de passe</Label>
         <PasswordInput
           id="reg-pw"
           value={password}
-          onChange={(e) =>
-            setPassword(e.target.value)
-          }
+          onChange={(e) => setPassword(e.target.value)}
           placeholder="Choisissez un mot de passe"
           required
         />
@@ -746,16 +832,73 @@ function RegisterInfo({
         <Label htmlFor="reg-pw-confirm">
           Confirmer le mot de passe
         </Label>
-
         <PasswordInput
           id="reg-pw-confirm"
           value={confirmPassword}
-          onChange={(e) =>
-            setConfirmPassword(e.target.value)
-          }
+          onChange={(e) => setConfirmPassword(e.target.value)}
           placeholder="Confirmez le mot de passe"
           required
         />
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border p-4 text-sm">
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={acceptedTerms}
+            onChange={(e) => {
+              setAcceptedTerms(e.target.checked)
+              setConsentError('')
+            }}
+            required
+            className="mt-1"
+          />
+          <span>
+            J’accepte les{' '}
+            <a
+              href="/conditions-utilisation"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline"
+            >
+              Conditions d’utilisation
+            </a>
+            {' '}et la{' '}
+            <a
+              href="/politique-confidentialite"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline"
+            >
+              Politique de confidentialité
+            </a>
+            .
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={marketingConsent}
+            onChange={(e) =>
+              setMarketingConsent(e.target.checked)
+            }
+            className="mt-1"
+          />
+          <span>
+            J’accepte de recevoir les actualités et offres commerciales
+            d’i-tafa (facultatif).
+          </span>
+        </label>
+
+        {consentError && (
+          <p
+            className="text-sm text-destructive"
+            role="alert"
+          >
+            {consentError}
+          </p>
+        )}
       </div>
 
       <Button
@@ -769,8 +912,9 @@ function RegisterInfo({
             aria-hidden="true"
           />
         )}
-
-        Continuer vers le paiement
+        {accountType === 'buyer'
+          ? 'Créer mon compte'
+          : 'Continuer vers le paiement'}
       </Button>
     </form>
   )

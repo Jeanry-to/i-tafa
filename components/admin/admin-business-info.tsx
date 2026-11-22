@@ -71,7 +71,7 @@ export function AdminBusinessInfo() {
         <CardHeader>
           <CardTitle className="text-base">Informations generales</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Ces informations seront utilisees par votre Agent IA pour repondre a vos clients.
+            Ces informations seront utilisees par votre Agent IA pour repondre a vos clients. Votre numero de telephone sera aussi visible des acheteurs connectes sur la marketplace, avec un bouton pour vous contacter sur WhatsApp.
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
