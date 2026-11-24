@@ -30,6 +30,9 @@ export type Client = {
   suspensionReason?: string
   suspendedAt?: string
   suspendedUntil?: string
+  paymentMethod?: string
+  paymentRef?: string
+  amountPaid?: number
   socials: {
     facebook?: string
     whatsapp?: string
@@ -78,6 +81,9 @@ type ClientRow = {
   suspension_reason: string | null
   suspended_at: string | null
   suspended_until: string | null
+  payment_method?: string | null
+  payment_ref?: string | null
+  amount_paid?: number | null
   profiles: {
     id: string
     full_name: string
@@ -191,6 +197,9 @@ function mapClient(row: ClientRow): Client {
     suspensionReason: row.suspension_reason ?? undefined,
     suspendedAt: row.suspended_at ?? undefined,
     suspendedUntil: row.suspended_until ?? undefined,
+    paymentMethod: row.payment_method ?? undefined,
+    paymentRef: row.payment_ref ?? undefined,
+    amountPaid: row.amount_paid ?? undefined,
     socials: {
       facebook: row.facebook_url ?? undefined,
       whatsapp: row.whatsapp_url ?? undefined,
@@ -682,7 +691,7 @@ export async function getClients() {
     await supabase
       .from('clients')
       .select(
-        'id, profile_id, status, joined_at, facebook_url, whatsapp_url, instagram_url, suspension_reason, suspended_at, suspended_until, profiles!inner(id, full_name, email, phone, address), messages(body, sent_at, sender_id, read_at)',
+        'id, profile_id, status, joined_at, facebook_url, whatsapp_url, instagram_url, suspension_reason, suspended_at, suspended_until, payment_method, payment_ref, amount_paid, profiles!inner(id, full_name, email, phone, address), messages(body, sent_at, sender_id, read_at)',
       )
       .order('joined_at', { ascending: false }),
   ) as unknown as ClientRow[]
@@ -697,7 +706,7 @@ export async function getClientForProfile(
     await supabase
       .from('clients')
       .select(
-        'id, profile_id, status, joined_at, facebook_url, whatsapp_url, instagram_url, suspension_reason, suspended_at, suspended_until, profiles!inner(id, full_name, email, phone, address), messages(body, sent_at, sender_id, read_at)',
+        'id, profile_id, status, joined_at, facebook_url, whatsapp_url, instagram_url, suspension_reason, suspended_at, suspended_until, payment_method, payment_ref, amount_paid, profiles!inner(id, full_name, email, phone, address), messages(body, sent_at, sender_id, read_at)',
       )
       .eq('profile_id', profileId)
       .maybeSingle(),
