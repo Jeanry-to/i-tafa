@@ -37,6 +37,63 @@ function formatDate(value: string | null | undefined) {
   }
 }
 
+function PaymentInfo({
+  client,
+  showEmpty = false,
+  className = '',
+}: {
+  client: Client
+  showEmpty?: boolean
+  className?: string
+}) {
+  const hasData = Boolean(
+    client.paymentRef || client.paymentMethod || client.amountPaid,
+  )
+
+  if (!hasData && !showEmpty) return null
+
+  return (
+    <div
+      className={
+        'rounded-xl border border-border bg-muted/40 p-3 text-sm ' +
+        className
+      }
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {'Paiement d\u00e9clar\u00e9'}
+      </p>
+
+      <p className="mt-2 text-muted-foreground">
+        {'Moyen de paiement : '}
+        <span className="font-medium text-foreground">
+          {client.paymentMethod || 'Non pr\u00e9cis\u00e9'}
+        </span>
+      </p>
+
+      <p className="mt-1 text-muted-foreground">
+        {'R\u00e9f\u00e9rence : '}
+        {client.paymentRef ? (
+          <span className="select-all break-all font-mono font-semibold text-foreground">
+            {client.paymentRef}
+          </span>
+        ) : (
+          <span className="font-medium text-amber-700 dark:text-amber-400">
+            {'aucune r\u00e9f\u00e9rence enregistr\u00e9e'}
+          </span>
+        )}
+      </p>
+
+      {client.amountPaid ? (
+        <p className="mt-1 text-muted-foreground">
+          {'Montant : '}
+          <span className="font-medium text-foreground">
+            {client.amountPaid.toLocaleString('fr-FR')}
+          </span>
+        </p>
+      ) : null}
+    </div>
+  )
+}
 function getInitials(name: string) {
   return name
     .trim()
@@ -496,6 +553,7 @@ export function ClientManagement({
                       )}
                     </button>
                   </div>
+                  {isPending && <PaymentInfo client={client} showEmpty />}
 
                   <div className="flex flex-wrap items-center gap-2">
                     {isPending ? (
@@ -699,7 +757,11 @@ export function ClientManagement({
                   </span>
                 </button>
 
-                {profileClient.status ===
+                <PaymentInfo
+                  client={profileClient}
+                  showEmpty={profileClient.status === 'en_attente'}
+                  className="mb-3"
+                />                {profileClient.status ===
                 'en_attente' ? (
                   <>
                     <button
@@ -973,6 +1035,13 @@ export function ClientManagement({
                   : 'Voulez-vous vraiment refuser cette inscription ? Le compte ne sera pas activé.'}
               </p>
 
+              {confirmation.type === 'validate' && (
+                <PaymentInfo
+                  client={confirmation.client}
+                  showEmpty
+                  className="mt-4"
+                />
+              )}
               <div className="mt-6 flex justify-end gap-3">
                 <button
                   type="button"
